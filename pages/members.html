@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OmniForum — Members</title>
+<link rel="stylesheet" href="../css/main.css">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="app">
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo"><span class="logo-mark">◈</span><span class="logo-text">OmniForum</span></a>
+    <div class="nav-links">
+      <a href="../index.html" class="nav-link">Forum</a>
+      <a href="members.html" class="nav-link active">Members</a>
+      <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+    </div>
+    <div class="nav-actions" id="navActions"></div>
+  </div>
+</nav>
+
+<div class="breadcrumb">
+  <a href="../index.html">Forum</a>
+  <span class="breadcrumb-sep">›</span>
+  <span class="breadcrumb-current">Members</span>
+</div>
+
+<main class="page-main">
+  <div class="main-col">
+    <div class="page-section">
+      <div class="page-section-title">
+        Member Directory
+        <span id="memberCount" style="font-size:13px;font-weight:400;color:var(--text-muted)">0 members</span>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
+        <input class="search-input" id="memberSearch" placeholder="Search members..." oninput="filterMembers()" style="max-width:260px">
+        <div class="sort-tabs" style="margin-bottom:0">
+          <button class="sort-tab active" data-role="all" onclick="filterRole('all', this)">All</button>
+          <button class="sort-tab" data-role="owner" onclick="filterRole('owner', this)">👑 Owner</button>
+          <button class="sort-tab" data-role="admin" onclick="filterRole('admin', this)">⚡ Admins</button>
+          <button class="sort-tab" data-role="mod" onclick="filterRole('mod', this)">🛡️ Mods</button>
+          <button class="sort-tab" data-role="veteran" onclick="filterRole('veteran', this)">⭐ Veterans</button>
+          <button class="sort-tab" data-role="member" onclick="filterRole('member', this)">💎 Members</button>
+          <button class="sort-tab" data-role="new" onclick="filterRole('new', this)">🌱 New</button>
+        </div>
+      </div>
+
+      <div class="members-grid" id="membersGrid"></div>
+    </div>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Your Account</h3>
+      <div id="sidebarUser" class="sidebar-user-panel"></div>
+    </div>
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Role Breakdown</h3>
+      <ul class="sidebar-stats" id="roleBreakdown"></ul>
+    </div>
+  </aside>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <span class="logo-text footer-logo">◈ OmniForum</span>
+    <span class="footer-copy">Community Forum · Built with passion · <span id="footerYear"></span></span>
+    <div class="footer-links"><a href="rules.html">Rules</a><a href="privacy.html">Privacy</a><a href="contact.html">Contact</a></div>
+  </div>
+</footer>
+</div>
+
+<div id="modalOverlay" class="modal-overlay hidden" onclick="closeModal(event)">
+  <div class="modal" id="modal"></div>
+</div>
+<div id="toastContainer" class="toast-container"></div>
+
+<script src="../js/api.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/forum.js"></script>
+<script src="../js/page-members.js"></script>
+</body>
+</html>

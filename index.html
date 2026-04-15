@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OmniForum — Community Hub</title>
+<link rel="stylesheet" href="css/main.css">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="app">
+
+<!-- NAVBAR -->
+<nav class="navbar" id="navbar">
+  <div class="nav-inner">
+    <a href="index.html" class="logo">
+      <span class="logo-mark">◈</span>
+      <span class="logo-text">OmniForum</span>
+    </a>
+    <div class="nav-links" id="navLinks">
+      <a href="index.html" class="nav-link active">Forum</a>
+      <a href="pages/members.html" class="nav-link">Members</a>
+      <a href="pages/leaderboard.html" class="nav-link">Leaderboard</a>
+    </div>
+    <div class="nav-actions" id="navActions">
+      <!-- Injected by JS -->
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="forum-hero">
+  <div class="hero-bg">
+    <div class="hero-grid"></div>
+    <div class="hero-glow g1"></div>
+    <div class="hero-glow g2"></div>
+  </div>
+  <div class="hero-content">
+    <p class="hero-eyebrow">Welcome to</p>
+    <h1 class="hero-title">Omni<span class="title-accent">Forum</span></h1>
+    <p class="hero-sub">A community built for thinkers, creators, and builders.</p>
+    <div class="hero-stats" id="heroStats">
+      <div class="stat"><span class="stat-num" id="statPosts">—</span><span class="stat-label">Posts</span></div>
+      <div class="stat-div"></div>
+      <div class="stat"><span class="stat-num" id="statMembers">—</span><span class="stat-label">Members</span></div>
+      <div class="stat-div"></div>
+      <div class="stat"><span class="stat-num" id="statOnline">—</span><span class="stat-label">Online</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- ANNOUNCEMENTS TICKER -->
+<div class="ticker-wrap" id="tickerWrap"></div>
+
+<!-- MAIN LAYOUT -->
+<main class="forum-main">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Your Account</h3>
+      <div id="sidebarUser" class="sidebar-user-panel">
+        <!-- Injected by JS -->
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Quick Stats</h3>
+      <ul class="sidebar-stats" id="sidebarStats"></ul>
+    </div>
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Recent Activity</h3>
+      <ul class="activity-list" id="activityList"></ul>
+    </div>
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Top Members</h3>
+      <ul class="top-members" id="topMembers"></ul>
+    </div>
+  </aside>
+
+  <!-- FORUM SECTIONS -->
+  <div class="forum-content">
+    <div class="content-header">
+      <h2 class="section-heading">Forum Sections</h2>
+      <div class="view-toggle">
+        <button class="vt-btn active" id="btnExpanded" onclick="setView('expanded')">Expanded</button>
+        <button class="vt-btn" id="btnCompact" onclick="setView('compact')">Compact</button>
+      </div>
+    </div>
+
+    <div id="trendingThreads" class="trending-thread-strip"></div>
+
+    <div id="forumCategories" class="forum-categories">
+      <!-- Injected by JS -->
+    </div>
+  </div>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <span class="logo-text footer-logo">◈ OmniForum</span>
+    <span class="footer-copy">Community Forum · Built with passion · <span id="footerYear"></span></span>
+    <div class="footer-links">
+      <a href="pages/rules.html">Rules</a>
+      <a href="pages/privacy.html">Privacy</a>
+      <a href="pages/contact.html">Contact</a>
+    </div>
+  </div>
+</footer>
+
+</div>
+
+<!-- MODAL OVERLAY -->
+<div id="modalOverlay" class="modal-overlay hidden" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <!-- Content injected by JS -->
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toastContainer" class="toast-container"></div>
+
+<script src="js/api.js"></script>
+<script src="js/data.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/forum.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

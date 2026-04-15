@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OmniForum — Section</title>
+<link rel="stylesheet" href="../css/main.css">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="app">
+
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo"><span class="logo-mark">◈</span><span class="logo-text">OmniForum</span></a>
+    <div class="nav-links">
+      <a href="../index.html" class="nav-link">Forum</a>
+      <a href="members.html" class="nav-link">Members</a>
+      <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+    </div>
+    <div class="nav-actions" id="navActions"></div>
+  </div>
+</nav>
+
+<div class="breadcrumb">
+  <a href="../index.html">Forum</a>
+  <span class="breadcrumb-sep">›</span>
+  <span class="breadcrumb-current" id="breadSection">Section</span>
+</div>
+
+<main class="page-main">
+  <div class="main-col">
+    <!-- Section Header -->
+    <div class="thread-header" id="sectionHeader"></div>
+
+    <!-- Thread Controls -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div class="sort-tabs">
+        <button class="sort-tab active" data-sort="latest" onclick="sortThreads('latest', this)">Latest</button>
+        <button class="sort-tab" data-sort="hot" onclick="sortThreads('hot', this)">🔥 Hot</button>
+        <button class="sort-tab" data-sort="pinned" onclick="sortThreads('pinned', this)">📌 Pinned</button>
+        <button class="sort-tab" data-sort="replies" onclick="sortThreads('replies', this)">Most Replies</button>
+      </div>
+      <button class="btn btn-primary btn-sm" id="newThreadBtn" onclick="showNewThreadModal()">+ New Thread</button>
+    </div>
+
+    <div class="search-bar">
+      <input class="search-input" id="threadSearch" placeholder="Search threads..." oninput="filterThreads()">
+    </div>
+
+    <div class="thread-list" id="threadList"></div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Your Account</h3>
+      <div id="sidebarUser" class="sidebar-user-panel"></div>
+    </div>
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Section Info</h3>
+      <ul class="sidebar-stats" id="sectionStats"></ul>
+    </div>
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Top Members</h3>
+      <ul class="top-members" id="topMembers"></ul>
+    </div>
+  </aside>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <span class="logo-text footer-logo">◈ OmniForum</span>
+    <span class="footer-copy">Community Forum</span>
+    <div class="footer-links"><a href="rules.html">Rules</a><a href="privacy.html">Privacy</a><a href="contact.html">Contact</a></div>
+  </div>
+</footer>
+
+</div>
+
+<div id="modalOverlay" class="modal-overlay hidden" onclick="closeModal(event)">
+  <div class="modal" id="modal"></div>
+</div>
+<div id="toastContainer" class="toast-container"></div>
+
+<script src="../js/api.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/forum.js"></script>
+<script src="../js/page-section.js"></script>
+</body>
+</html>

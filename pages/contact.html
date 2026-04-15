@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OmniForum — Contact</title>
+<link rel="stylesheet" href="../css/main.css">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="app">
+<nav class="navbar">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo"><span class="logo-mark">◈</span><span class="logo-text">OmniForum</span></a>
+    <div class="nav-links">
+      <a href="../index.html" class="nav-link">Forum</a>
+      <a href="members.html" class="nav-link">Members</a>
+      <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+    </div>
+    <div class="nav-actions" id="navActions"></div>
+  </div>
+</nav>
+
+<div class="breadcrumb">
+  <a href="../index.html">Forum</a>
+  <span class="breadcrumb-sep">›</span>
+  <span class="breadcrumb-current">Contact</span>
+</div>
+
+<main class="page-main">
+  <div class="main-col">
+    <div class="page-section legal-hero">
+      <p class="hero-eyebrow">Contact Staff</p>
+      <h1 class="thread-title">Send a Message to Moderators or Admins</h1>
+      <p class="muted-copy">Use this form for moderation concerns, account issues, bug reports, privacy questions, or anything else that should land directly in the staff inbox.</p>
+    </div>
+
+    <div class="page-section contact-card">
+      <div class="form-error" id="contactError"></div>
+      <div class="form-success" id="contactSuccess"></div>
+      <form id="contactForm" onsubmit="event.preventDefault(); submitContactForm();">
+        <div class="form-group">
+          <label class="form-label">Name</label>
+          <input class="form-input" id="contactName" maxlength="80" placeholder="Your name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Discord Username</label>
+          <input class="form-input" id="contactDiscord" maxlength="64" placeholder="omniforum.staff">
+          <div class="form-hint">Optional, but helpful if you want staff to have a Discord handle to reference.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Subject</label>
+          <input class="form-input" id="contactSubject" maxlength="120" placeholder="What do you need help with?">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Message</label>
+          <textarea class="form-textarea" id="contactMessage" placeholder="Describe the issue, question, or request in detail."></textarea>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-ghost" type="reset">Clear</button>
+          <button class="btn btn-primary" type="submit">Send to Staff</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">Your Account</h3>
+      <div id="sidebarUser" class="sidebar-user-panel"></div>
+    </div>
+    <div class="sidebar-section">
+      <h3 class="sidebar-title">What Happens Next</h3>
+      <ul class="sidebar-stats">
+        <li><span>Your message</span><strong>Stored securely</strong></li>
+        <li><span>Staff notice</span><strong>Inbox alert</strong></li>
+        <li><span>Who sees it</span><strong>Mods/Admins</strong></li>
+        <li><span>Best contact</span><strong>Forum account or Discord</strong></li>
+      </ul>
+    </div>
+  </aside>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <span class="logo-text footer-logo">◈ OmniForum</span>
+    <span class="footer-copy">Community Forum · Built with passion · <span id="footerYear"></span></span>
+    <div class="footer-links">
+      <a href="rules.html">Rules</a>
+      <a href="privacy.html">Privacy</a>
+      <a href="contact.html">Contact</a>
+    </div>
+  </div>
+</footer>
+</div>
+
+<div id="modalOverlay" class="modal-overlay hidden" onclick="closeModal(event)">
+  <div class="modal" id="modal"></div>
+</div>
+<div id="toastContainer" class="toast-container"></div>
+
+<script src="../js/api.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/forum.js"></script>
+<script src="../js/page-contact.js"></script>
+</body>
+</html>
