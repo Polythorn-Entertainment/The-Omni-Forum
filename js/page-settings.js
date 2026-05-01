@@ -96,6 +96,71 @@ function renderAppealList(items = []) {
   `;
 }
 
+function renderRelationshipList(items = []) {
+  if (!items.length) {
+    return `<div class="centered-message settings-empty-block">You are not ignoring or blocking anyone right now.</div>`;
+  }
+  return `
+    <div class="settings-thread-list">
+      ${items.map((item) => `
+        <div class="settings-thread-card">
+          <div>
+            <div class="settings-thread-title">${escapeHtml(item.user?.username || "Member")}</div>
+            <div class="settings-thread-meta">
+              ${item.ignoreContent ? "<span>Ignoring posts</span>" : ""}
+              ${item.blockDm ? "<span>Blocking DMs</span>" : ""}
+              <span>${escapeHtml(formatRelativeTime(item.updatedAt))}</span>
+            </div>
+            ${item.user?.statusText ? `<div class="tiny-copy">${escapeHtml(item.user.statusText)}</div>` : ""}
+          </div>
+          <div class="stack-actions">
+            <button class="btn btn-ghost btn-sm" onclick="showProfile(${JSON.stringify(item.user?.id)})">Profile</button>
+            ${item.ignoreContent ? `<button class="btn btn-outline btn-sm" onclick="updateSettingsRelationship(${JSON.stringify(item.user?.id)}, { ignoreContent: false, blockDm: ${item.blockDm ? "true" : "false"} })">Unignore</button>` : ""}
+            ${item.blockDm ? `<button class="btn btn-outline btn-sm" onclick="updateSettingsRelationship(${JSON.stringify(item.user?.id)}, { ignoreContent: ${item.ignoreContent ? "true" : "false"}, blockDm: false })">Unblock DMs</button>` : ""}
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function draftRecoveryTarget(draft) {
+  if (draft.scope === "new-thread") {
+    return pageHref("section.html", { section: draft.id });
+  }
+  if (draft.scope === "thread-reply") {
+    return pageHref("thread.html", { thread: draft.id });
+  }
+  return "";
+}
+
+function renderDraftRecoveryList() {
+  const drafts = typeof listDrafts === "function" ? listDrafts() : [];
+  if (!drafts.length) {
+    return `<div class="centered-message settings-empty-block">No saved local drafts on this browser.</div>`;
+  }
+  return `
+    <div class="settings-thread-list">
+      ${drafts.slice(0, 12).map((draft) => {
+        const href = draftRecoveryTarget(draft);
+        const label = draft.scope === "new-thread" ? "Thread draft" : draft.scope === "thread-reply" ? "Reply draft" : "Draft";
+        return `
+          <div class="settings-thread-card">
+            <div>
+              <div class="settings-thread-title">${escapeHtml(draft.title || "Untitled draft")}</div>
+              <div class="settings-thread-meta">
+                <span>${escapeHtml(label)}</span>
+                <span>${draft.savedAt ? escapeHtml(formatRelativeTime(draft.savedAt)) : "Saved locally"}</span>
+              </div>
+            </div>
+            ${href ? `<a class="btn btn-ghost btn-sm" href="${escapeHtml(href)}">Recover</a>` : ""}
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function accentOptionMarkup(selected = "") {
   const palette = ["", "#00d4ff", "#7b5ea7", "#ff6b6b", "#ffd166", "#06d6a0", "#6b7a94"];
   return palette.map((value) => `
@@ -183,6 +248,9 @@ function renderSettingsContent() {
   const sessionAudit = user.recentSessions || user.sessionAudit || [];
   const library = user.library || { bookmarks: [], subscriptions: [] };
   const community = user.community || { signature: "", profileBadge: "", profileAccent: "" };
+  const recovery = user.recovery || { discordUsername: "", codes: { active: 0, total: 0 } };
+  const mediaUsage = user.mediaUsage || null;
+  const relationships = user.relationships || [];
 
   const statusMarkup = moderation
     ? renderModerationStatus(moderation)
@@ -300,10 +368,13 @@ function renderSettingsContent() {
       <div class="detail-list">
         <div><span>Role</span><strong>${escapeHtml(role.label)}</strong></div>
         <div><span>Member Since</span><strong>${escapeHtml(formatDate(user.joined))}</strong></div>
+        <div><span>Trust Level</span><strong>${escapeHtml(user.trust?.label || "Member")}</strong></div>
         <div><span>Status</span><strong>${user.online ? "Online" : "Offline"}</strong></div>
         <div><span>Restrictions</span><strong>${escapeHtml(settingsRestrictionLabel(user))}</strong></div>
+        ${user.trust?.limits ? `<div><span>Posting Limits</span><strong>${escapeHtml(user.trust.limits)}</strong></div>` : ""}
         <div><span>Unread Alerts</span><strong>${fmtNum(user.notificationCount || 0)}</strong></div>
         <div><span>Unread Messages</span><strong>${fmtNum(user.messageCount || 0)}</strong></div>
+        ${mediaUsage ? `<div><span>Media Used</span><strong>${escapeHtml(mediaUsage.bytesLabel || "0B")}</strong></div>` : ""}
       </div>
     </div>
 
@@ -343,6 +414,11 @@ function renderSettingsContent() {
             <textarea class="form-textarea" id="settingsBio" maxlength="280" placeholder="Tell the forum a little about yourself.">${escapeHtml(user.bio || "")}</textarea>
             <div class="form-hint">Up to 280 characters.</div>
           </div>
+          <div class="form-group full">
+            <label class="form-label">Status Message</label>
+            <input class="form-input" id="settingsStatusText" maxlength="120" value="${escapeHtml(community.statusText || "")}" placeholder="Working on a new project, open to DMs, heads down in support mode...">
+            <div class="form-hint">A short public line shown on your profile and member cards.</div>
+          </div>
           <div class="form-group">
             <label class="form-label">Profile Badge</label>
             <input class="form-input" id="settingsProfileBadge" maxlength="32" value="${escapeHtml(community.profileBadge || "")}" placeholder="Builder">
@@ -357,6 +433,11 @@ function renderSettingsContent() {
             <label class="form-label">Signature</label>
             <textarea class="form-textarea" id="settingsSignature" maxlength="240" placeholder="Appears below your posts. Supports the same markdown / BBCode as the post composer.">${escapeHtml(community.signature || "")}</textarea>
             <div class="form-hint">Great for a short intro, favorite quote, or project link.</div>
+          </div>
+          <div class="form-group full">
+            <label class="form-label">Recovery Discord Username</label>
+            <input class="form-input" id="settingsRecoveryDiscord" maxlength="64" value="${escapeHtml(recovery.discordUsername || "")}" placeholder="your.discord.username">
+            <div class="form-hint">Optional. Admins can use this as a verification note if you ever need email-free account recovery.</div>
           </div>
         </div>
       </div>
@@ -400,6 +481,9 @@ function renderSettingsContent() {
             <label class="checkbox-row"><input type="checkbox" id="settingsNotifyLikes"${preferences.notifyLikes ? " checked" : ""}> <span>Likes on your posts</span></label>
             <label class="checkbox-row"><input type="checkbox" id="settingsNotifyMentions"${preferences.notifyMentions ? " checked" : ""}> <span>@mentions</span></label>
             <label class="checkbox-row"><input type="checkbox" id="settingsNotifyDms"${preferences.notifyDms ? " checked" : ""}> <span>Direct messages</span></label>
+            <label class="checkbox-row"><input type="checkbox" id="settingsBlurSensitiveMedia"${preferences.blurSensitiveMedia !== false ? " checked" : ""}> <span>Blur media marked sensitive until I reveal it</span></label>
+            <label class="checkbox-row"><input type="checkbox" id="settingsCompactPostLayout"${preferences.compactPostLayout ? " checked" : ""}> <span>Use the compact thread layout when available</span></label>
+            <label class="checkbox-row"><input type="checkbox" id="settingsHideIgnoredContent"${preferences.hideIgnoredContent !== false ? " checked" : ""}> <span>Hide posts from members I ignore</span></label>
           </div>
         </div>
       </div>
@@ -423,6 +507,18 @@ function renderSettingsContent() {
           ${renderSavedThreads(library.subscriptions || [], "You are not following any threads yet.")}
         </div>
       </div>
+    </div>
+
+    <div class="page-section">
+      <div class="page-section-title">Draft Recovery</div>
+      <p class="muted-copy settings-section-copy">Drafts are saved locally in this browser while you write threads and replies, with separate drafts per section or thread.</p>
+      ${renderDraftRecoveryList()}
+    </div>
+
+    <div class="page-section">
+      <div class="page-section-title">Ignored & Blocked Members</div>
+      <p class="muted-copy settings-section-copy">Manage the people whose posts you hide or whose DMs you block.</p>
+      ${renderRelationshipList(relationships)}
     </div>
 
     <div class="page-section">
@@ -453,6 +549,19 @@ function renderSettingsContent() {
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" onclick="saveSettingsPassword()">Update Password</button>
+      </div>
+      <div class="settings-tool-grid" style="margin-top:18px;">
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Recovery Codes</div>
+          <div class="settings-tool-copy">One-time codes let you recover the account without email, then force a password reset.</div>
+          <div class="detail-list">
+            <div><span>Active Codes</span><strong>${fmtNum(recovery.codes?.active || 0)}</strong></div>
+            <div><span>Last Generated</span><strong>${escapeHtml(formatDateTime(recovery.codes?.latestCreatedAt))}</strong></div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-outline btn-sm" onclick="showRecoveryCodesModal()">Manage Codes</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -486,6 +595,22 @@ function renderSettingsContent() {
     ${staffSection}
     ${adminSection}
     ${ownerSection}
+
+    <div class="page-section">
+      <div class="page-section-title">Account Data</div>
+      <p class="muted-copy settings-section-copy">Download a JSON export of your profile, posts, messages, relationships, and account metadata.</p>
+      ${mediaUsage ? `
+        <div class="detail-list">
+          <div><span>Media Library</span><strong>${escapeHtml(mediaUsage.bytesLabel || "0B")} / ${escapeHtml(mediaUsage.limitBytesLabel || "0B")}</strong></div>
+          <div><span>Files</span><strong>${fmtNum(mediaUsage.files || 0)} / ${fmtNum(mediaUsage.limitFiles || 0)}</strong></div>
+          <div><span>Remaining</span><strong>${escapeHtml(mediaUsage.remainingBytesLabel || "0B")}</strong></div>
+          <div><span>Uploads</span><strong>${fmtNum(mediaUsage.postMediaCount || 0)} post media</strong></div>
+        </div>
+      ` : ""}
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="exportSettingsData()">Download My Data</button>
+      </div>
+    </div>
 
     <div class="page-section">
       <div class="page-section-title">Policy & Help</div>
@@ -531,6 +656,8 @@ function renderSettingsSidebar() {
     { label: "Post access", value: "Section-based" },
     { label: "Theme", value: siteThemeLabel(user.preferences?.siteTheme || "midnight") },
     { label: "DM privacy", value: dmPrivacyLabel(user.preferences?.dmPrivacy || "everyone") },
+    { label: "Ignored members", value: fmtNum((user.relationships || []).filter((item) => item.ignoreContent).length) },
+    { label: "Blocked DMs", value: fmtNum((user.relationships || []).filter((item) => item.blockDm).length) },
     { label: "Moderation tools", value: Auth.isStaff() ? "Granted" : "Hidden" },
     { label: "Section editor", value: Auth.isAdmin() ? "Granted" : "Hidden" },
     { label: "Operations", value: Auth.isAdmin() ? "Granted" : "Hidden" },
@@ -584,15 +711,24 @@ async function refreshCurrentPage() {
   renderFooterYear();
   renderSettingsContent();
   renderSettingsSidebar();
+  setPageMetadata({
+    title: "OmniForum — Settings",
+    description: "Manage your OmniForum account, profile, privacy, notifications, sessions, and appearance preferences.",
+    canonicalPath: `${window.location.pathname}${window.location.search || ""}`,
+    type: "website",
+    noindex: true,
+  });
 }
 
 async function saveSettingsProfile() {
   const error = document.getElementById("settingsProfileError");
   const username = document.getElementById("settingsUsername")?.value?.trim() || "";
   const bio = document.getElementById("settingsBio")?.value || "";
+  const statusText = document.getElementById("settingsStatusText")?.value?.trim() || "";
   const profileBadge = document.getElementById("settingsProfileBadge")?.value?.trim() || "";
   const profileAccent = document.getElementById("settingsProfileAccent")?.value || "";
   const signature = document.getElementById("settingsSignature")?.value || "";
+  const recoveryDiscordUsername = document.getElementById("settingsRecoveryDiscord")?.value?.trim() || "";
   const avatarInput = document.getElementById("settingsAvatarInput");
   const removeAvatar = Boolean(document.getElementById("settingsRemoveAvatar")?.checked);
   if (error) error.classList.remove("visible");
@@ -602,7 +738,7 @@ async function saveSettingsProfile() {
       maxBytes: UPLOAD_LIMITS.avatarBytes,
       field: "Profile picture",
     });
-    const payload = { username, bio, profileBadge, profileAccent, signature };
+    const payload = { username, bio, statusText, profileBadge, profileAccent, signature, recoveryDiscordUsername };
     if (avatarUpload) {
       payload.avatarUpload = avatarUpload;
     } else if (removeAvatar) {
@@ -631,6 +767,9 @@ async function saveSettingsPreferences() {
       notifyLikes: Boolean(document.getElementById("settingsNotifyLikes")?.checked),
       notifyMentions: Boolean(document.getElementById("settingsNotifyMentions")?.checked),
       notifyDms: Boolean(document.getElementById("settingsNotifyDms")?.checked),
+      blurSensitiveMedia: Boolean(document.getElementById("settingsBlurSensitiveMedia")?.checked),
+      compactPostLayout: Boolean(document.getElementById("settingsCompactPostLayout")?.checked),
+      hideIgnoredContent: Boolean(document.getElementById("settingsHideIgnoredContent")?.checked),
     });
     Auth.setCurrentUser(data.currentUser || null);
     toast(data.message || "Preferences updated.", "success");
@@ -693,6 +832,73 @@ async function saveSettingsPassword() {
   }
 }
 
+async function showRecoveryCodesModal() {
+  if (!Auth.getCurrentUser()) {
+    toast("Log in to manage recovery codes.", "error");
+    return;
+  }
+  openModal(`
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">Recovery Codes</div>
+    <div class="muted-copy">Loading recovery status...</div>
+  `, { size: "lg" });
+  try {
+    const data = await API.getRecoveryCodes();
+    const summary = data.summary || {};
+    openModal(`
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">Recovery Codes</div>
+      <div class="muted-copy">Recovery codes are one-time login keys for email-free account recovery. Using one starts a forced password reset session.</div>
+      <div class="detail-list" style="margin-top:16px;">
+        <div><span>Active Codes</span><strong>${fmtNum(summary.active || 0)}</strong></div>
+        <div><span>Total Created</span><strong>${fmtNum(summary.total || 0)}</strong></div>
+        <div><span>Discord Verification</span><strong>${escapeHtml(data.discordUsername ? `@${data.discordUsername}` : "Not set")}</strong></div>
+      </div>
+      <div class="form-error" id="recoveryCodesError"></div>
+      ${Auth.mustResetPassword() ? "" : `
+        <div class="form-group" style="margin-top:16px;">
+          <label class="form-label">Current Password</label>
+          <input class="form-input" id="recoveryCodesPassword" type="password" autocomplete="current-password" placeholder="Required to regenerate codes">
+        </div>
+      `}
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="generateRecoveryCodes()">Generate New Codes</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      </div>
+    `, { size: "lg" });
+  } catch (err) {
+    toast(err.message || "Could not load recovery codes.", "error");
+  }
+}
+
+async function generateRecoveryCodes() {
+  const error = document.getElementById("recoveryCodesError");
+  if (error) error.classList.remove("visible");
+  try {
+    const data = await API.createRecoveryCodes({
+      currentPassword: document.getElementById("recoveryCodesPassword")?.value || "",
+    });
+    const codes = data.codes || [];
+    openModal(`
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">Save These Codes</div>
+      <div class="form-success visible">These codes are shown once. Store them somewhere safe before closing this window.</div>
+      <pre class="forum-code-block admin-log-block"><code>${escapeHtml(codes.join("\n"))}</code></pre>
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="copyTextValue(${serializeJsArg(codes.join("\n"))}, 'Recovery codes')">Copy Codes</button>
+        <button class="btn btn-primary" onclick="closeModal(); refreshCurrentPage()">Done</button>
+      </div>
+    `, { size: "lg" });
+  } catch (err) {
+    if (error) {
+      error.textContent = err.message || "Could not generate recovery codes.";
+      error.classList.add("visible");
+    } else {
+      toast(err.message || "Could not generate recovery codes.", "error");
+    }
+  }
+}
+
 async function revokeSettingsSessions() {
   const error = document.getElementById("settingsSessionsError");
   if (error) error.classList.remove("visible");
@@ -710,10 +916,37 @@ async function revokeSettingsSessions() {
   }
 }
 
+async function updateSettingsRelationship(userId, payload) {
+  try {
+    const data = await API.updateUserRelationship(userId, payload);
+    if (data.currentUser) {
+      Auth.setCurrentUser(data.currentUser);
+    }
+    toast(data.message || "Member controls updated.", "success");
+    await refreshCurrentPage();
+  } catch (err) {
+    toast(err.message || "Could not update that member relationship.", "error");
+  }
+}
+
+async function exportSettingsData() {
+  try {
+    const data = await API.exportMyData();
+    downloadJsonFile(data.filename || "omniforum-export.json", data.export || {});
+    toast("Account export downloaded.", "success");
+  } catch (err) {
+    toast(err.message || "Could not export your account data.", "error");
+  }
+}
+
 window.refreshCurrentPage = refreshCurrentPage;
 window.saveSettingsProfile = saveSettingsProfile;
 window.saveSettingsPreferences = saveSettingsPreferences;
 window.saveSettingsTheme = saveSettingsTheme;
 window.saveSettingsPassword = saveSettingsPassword;
+window.showRecoveryCodesModal = showRecoveryCodesModal;
+window.generateRecoveryCodes = generateRecoveryCodes;
 window.revokeSettingsSessions = revokeSettingsSessions;
 window.previewSettingsTheme = previewSettingsTheme;
+window.updateSettingsRelationship = updateSettingsRelationship;
+window.exportSettingsData = exportSettingsData;

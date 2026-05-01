@@ -40,11 +40,23 @@ async function refreshCurrentPage() {
     document.querySelectorAll(".sort-tab").forEach((tab) => {
       tab.classList.toggle("active", tab.dataset.role === currentRoleFilter);
     });
+    setPageMetadata({
+      title: "OmniForum — Members",
+      description: `Browse ${fmtNum(currentMemberPagination?.totalItems || allMembers.length)} community members on OmniForum.`,
+      canonicalPath: `/pages/members.html${window.location.search || ""}`,
+      type: "website",
+    });
   } catch (err) {
     const grid = document.getElementById("membersGrid");
     if (grid) {
       grid.innerHTML = renderEmptyState("⚠️", "Could not load members.", err.message || "Please try again.");
     }
+    setPageMetadata({
+      title: "OmniForum — Members",
+      description: "Browse community member profiles and activity on OmniForum.",
+      canonicalPath: `/pages/members.html${window.location.search || ""}`,
+      type: "website",
+    });
   }
 }
 
@@ -71,6 +83,7 @@ function renderMembers(members) {
         <div class="member-card-name">${escapeHtml(member.username)}</div>
         ${roleBadge(member.role)}
         <div class="member-card-stats">${fmtNum(member.posts || 0)} posts · ${fmtNum(member.threads || 0)} threads</div>
+        ${member.statusText ? `<div class="tiny-copy member-card-status">${escapeHtml(member.statusText)}</div>` : ""}
         <div class="tiny-copy member-card-meta">
           Joined ${escapeHtml(formatDate(member.joined))}
           ${member.online ? '&nbsp; <span class="online-dot"></span>' : ""}

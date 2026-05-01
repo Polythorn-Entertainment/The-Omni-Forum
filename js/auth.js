@@ -7,7 +7,7 @@ const Auth = {
       if (this.currentUser?.preferences?.siteTheme) {
         window.applySiteTheme(this.currentUser.preferences.siteTheme, { storage: "set" });
       } else {
-        window.applySiteTheme("midnight", { storage: "clear" });
+        window.applySiteTheme(window.getSiteDefaultTheme?.() || "midnight", { storage: "clear" });
       }
     }
     if (typeof window.handleAuthStateChanged === "function") {
@@ -25,16 +25,16 @@ const Auth = {
     return this.currentUser;
   },
 
-  async login(username, password) {
-    const data = await API.login({ username, password });
+  async login(username, password, recoveryCode = "") {
+    const data = await API.login({ username, password, recoveryCode });
     this.setCurrentUser(data.currentUser || null);
     return data.currentUser;
   },
 
-  async register(username, password) {
-    const data = await API.register({ username, password });
+  async register(username, password, inviteCode = "") {
+    const data = await API.register({ username, password, inviteCode });
     this.setCurrentUser(data.currentUser || null);
-    return data.currentUser;
+    return data;
   },
 
   async logout() {

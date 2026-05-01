@@ -41,6 +41,13 @@ const API = {
       config.body = JSON.stringify(options.body);
     }
 
+    if (!["GET", "HEAD", "OPTIONS"].includes(String(config.method).toUpperCase())) {
+      const csrfToken = window.Auth?.getCurrentUser?.()?.csrfToken;
+      if (csrfToken) {
+        config.headers["X-CSRF-Token"] = csrfToken;
+      }
+    }
+
     const response = await fetch(path, config);
     const text = await response.text();
     let payload = {};
@@ -61,6 +68,10 @@ const API = {
       Auth.setCurrentUser(payload.currentUser);
     }
 
+    if (payload && typeof payload === "object" && Object.prototype.hasOwnProperty.call(payload, "site") && typeof window.applySiteConfig === "function") {
+      window.applySiteConfig(payload.site);
+    }
+
     if (!response.ok) {
       throw new ApiError(payload?.error || `Request failed with status ${response.status}.`, response.status, payload);
     }
@@ -72,8 +83,16 @@ const API = {
     return this.request("/api/home");
   },
 
+  getSite() {
+    return this.request("/api/site");
+  },
+
   getMe() {
     return this.request("/api/me");
+  },
+
+  exportMyData() {
+    return this.request("/api/me/export");
   },
 
   login(credentials) {
@@ -100,13 +119,37 @@ const API = {
     return this.request("/api/me/sessions/revoke-others", { method: "POST" });
   },
 
+  getRecoveryCodes() {
+    return this.request("/api/me/recovery-codes");
+  },
+
+  createRecoveryCodes(payload) {
+    return this.request("/api/me/recovery-codes", { method: "POST", body: payload });
+  },
+
+  getLiveSnapshot(params = {}) {
+    return this.request(`/api/live${buildQuery(params)}`);
+  },
+
+  getPlugins(params = {}) {
+    return this.request(`/api/plugins${buildQuery(params)}`);
+  },
+
+  updatePlugin(pluginId, payload) {
+    return this.request(`/api/plugins/${encodeURIComponent(pluginId)}`, {
+      method: "PATCH",
+      body: payload,
+    });
+  },
+
   getSearch(queryOrParams) {
     const params = typeof queryOrParams === "string" ? { q: queryOrParams } : (queryOrParams || {});
     return this.request(`/api/search${buildQuery(params)}`);
   },
 
-  getNotifications(status = "all") {
-    return this.request(`/api/notifications?status=${encodeURIComponent(status)}`);
+  getNotifications(status = "all", kind = "all") {
+    const params = typeof status === "object" ? status : { status, kind };
+    return this.request(`/api/notifications${buildQuery(params)}`);
   },
 
   markNotificationRead(notificationId) {
@@ -163,6 +206,31 @@ const API = {
     });
   },
 
+  addReportNote(reportId, payload) {
+    return this.request(`/api/reports/${encodeURIComponent(reportId)}/notes`, {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  getReportMacros() {
+    return this.request("/api/reports/macros");
+  },
+
+  createReportMacro(payload) {
+    return this.request("/api/reports/macros", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  updateReportMacro(macroId, payload) {
+    return this.request(`/api/reports/macros/${encodeURIComponent(macroId)}`, {
+      method: "PATCH",
+      body: payload,
+    });
+  },
+
   getAppeals(status = "open", params = {}) {
     return this.request(`/api/appeals${buildQuery({ status, ...params })}`);
   },
@@ -208,6 +276,13 @@ const API = {
 
   getUser(userId) {
     return this.request(`/api/users/${encodeURIComponent(userId)}`);
+  },
+
+  updateUserRelationship(userId, payload) {
+    return this.request(`/api/users/${encodeURIComponent(userId)}/relationship`, {
+      method: "POST",
+      body: payload,
+    });
   },
 
   updateUserRole(userId, role) {
@@ -301,6 +376,13 @@ const API = {
     });
   },
 
+  splitThread(threadId, payload) {
+    return this.request(`/api/threads/${encodeURIComponent(threadId)}/split`, {
+      method: "POST",
+      body: payload,
+    });
+  },
+
   voteThreadPoll(threadId, optionIds) {
     return this.request(`/api/threads/${encodeURIComponent(threadId)}/poll`, {
       method: "POST",
@@ -312,19 +394,92 @@ const API = {
     return this.request("/api/admin/health");
   },
 
+  getAdminTrash(limit = 60) {
+    return this.request(`/api/admin/trash${buildQuery({ limit })}`);
+  },
+
   createBackup() {
     return this.request("/api/admin/backup", {
       method: "POST",
     });
   },
 
+  getBackupGuide(filename) {
+    return this.request(`/api/admin/backups/guide${buildQuery({ file: filename })}`);
+  },
+
   getAdminLogs() {
     return this.request("/api/admin/logs");
+  },
+
+  getAdminAudit(params = {}) {
+    return this.request(`/api/admin/audit${buildQuery(params)}`);
+  },
+
+  getAdminSiteSettings() {
+    return this.request("/api/admin/site-settings");
+  },
+
+  updateAdminSiteSettings(payload) {
+    return this.request("/api/admin/site-settings", {
+      method: "PATCH",
+      body: payload,
+    });
+  },
+
+  getAdminExport(params = {}) {
+    return this.request(`/api/admin/export${buildQuery(params)}`);
+  },
+
+  previewAdminImport(payload) {
+    return this.request("/api/admin/import-preview", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  getAdminRegistration() {
+    return this.request("/api/admin/registration");
+  },
+
+  updateRegistrationSettings(payload) {
+    return this.request("/api/admin/registration/settings", {
+      method: "PATCH",
+      body: payload,
+    });
+  },
+
+  createInvite(payload) {
+    return this.request("/api/admin/invites", {
+      method: "POST",
+      body: payload,
+    });
+  },
+
+  updateInvite(inviteId, payload) {
+    return this.request(`/api/admin/invites/${encodeURIComponent(inviteId)}`, {
+      method: "PATCH",
+      body: payload,
+    });
+  },
+
+  reviewRegistration(userId, payload) {
+    return this.request(`/api/admin/registrations/${encodeURIComponent(userId)}/review`, {
+      method: "POST",
+      body: payload,
+    });
   },
 
   cleanupMedia() {
     return this.request("/api/admin/media-cleanup", {
       method: "POST",
+    });
+  },
+
+  restoreAdminTrash(payload) {
+    return this.request("/api/admin/trash/restore", {
+      method: "POST",
+      body: payload,
     });
   },
 

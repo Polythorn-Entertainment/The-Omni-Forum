@@ -2,20 +2,28 @@
 
 OmniForum is a self-hosted forum application built on a lightweight Python backend with SQLite storage and a static HTML/CSS/JavaScript frontend.
 
-It is designed for a single-instance deployment with persistent disk storage, role-based moderation, direct messages, staff tooling, inline media, and admin operations such as backups and cleanup.
+It is designed for a single-instance deployment with persistent disk storage, role-based moderation, direct messages, real-time live updates, inline media, plugin-aware frontend extensions, and admin operations such as backups and cleanup.
 
 ## Highlights
 
 - Real accounts with persistent sessions
+- Signup abuse controls with invite-only mode, admin approval queue, registration throttles, and blocked username patterns
 - Role-aware sections, posting permissions, and hidden restricted areas
-- Threads, replies, quoting, reactions, likes, polls, bookmarks, and follows
+- Threads, replies, quoting, reactions, likes, polls, bookmarks, follows, split/merge/move tools, staff notes, and featured/pinned/locked/solved states
 - Inline image/GIF uploads in threads and replies
+- Sensitive-media controls, per-user media quotas, and account-level media usage tracking
 - Profile pictures, profile customization, signatures, and account settings
+- Admin-editable branding, homepage copy, policy copy, support links, feature toggles, and default theme
 - Full-site appearance themes with saved per-user color schemes
-- Direct messages, notifications, search, and trending/related discovery
+- Direct messages, polished unread notification filters, advanced search, and trending/related discovery
+- Live `EventSource` updates for nav alerts, thread activity, and section changes
+- Featured threads, status messages, and richer community spotlight cards
 - Reports, appeals, staff inbox, and moderation history
-- Temp-password recovery flow with forced reset on login
-- Admin tools for backups, logs, health checks, and media cleanup
+- Email-free recovery with user recovery codes, Discord verification notes, expiring temporary passwords, and forced reset on login
+- Admin tools for the first-run setup wizard, onboarding readiness, production install checks, backups, import/export previews, restore guidance, trash restore, logs, searchable audit events, analytics, search-term tracking, media cleanup, and plugin toggles
+- Public discovery helpers such as `robots.txt`, `sitemap.xml`, and richer share metadata
+- Automated Python smoke tests for API flows, admin operations, SSE, and public pages
+- Optional Discord webhook notifications for reports, appeals, contact notices, backups, and restores
 
 ## Stack
 
@@ -24,11 +32,12 @@ It is designed for a single-instance deployment with persistent disk storage, ro
 - Frontend: static HTML pages plus shared `js/` and `css/`
 - Media: uploaded avatars and post media served from `/media/...`
 
-No third-party Python packages are required by the current app.
+Pillow is the only runtime Python dependency and is used for image processing.
 
 ## Requirements
 
 - Python `3.10+`
+- Python dependencies from `requirements.txt`
 - A host that supports a long-running Python process
 - A persistent writable filesystem for `data/`
 - A reverse proxy with HTTPS for production use
@@ -63,12 +72,30 @@ Example:
 cd /Users/mizuhiki/Downloads/forum
 ```
 
-### 3. Start the website
+Optional: copy the environment template if you want to customize the public URL, upload quotas, or Discord webhook before first run:
+
+```bash
+cp .env.example .env
+```
+
+### 3. Create a virtual environment and install dependencies
 
 Run:
 
 ```bash
-python3 app.py
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+This installs Pillow, which OmniForum uses to process uploaded images, strip metadata, resize large images, and generate thumbnails.
+
+### 4. Start the website
+
+Run:
+
+```bash
+python app.py
 ```
 
 When it starts correctly, you should see:
@@ -77,7 +104,7 @@ When it starts correctly, you should see:
 OmniForum running at http://127.0.0.1:8000
 ```
 
-### 4. Open the site in your browser
+### 5. Open the site in your browser
 
 Open:
 
@@ -85,13 +112,13 @@ Open:
 http://127.0.0.1:8000
 ```
 
-### 5. Create the first account
+### 6. Create the first account
 
 The first account created on a brand-new OmniForum install becomes the `Owner`.
 
 That account has full control of the site.
 
-### 6. Confirm the data folder was created
+### 7. Confirm the data folder was created
 
 After the server starts, OmniForum creates and uses files inside `data/`, including:
 
@@ -101,7 +128,7 @@ After the server starts, OmniForum creates and uses files inside `data/`, includ
 
 If `data/` is writable, the site will create what it needs automatically.
 
-### 7. Stop the server when you are done
+### 8. Stop the server when you are done
 
 In the terminal where OmniForum is running, press:
 
@@ -139,7 +166,18 @@ ssh your-user@your-server-ip
 cd /var/www/omniforum
 ```
 
-### 4. Confirm Python is available
+### 4. Create your environment file
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set at least:
+
+- `OMNIFORUM_PUBLIC_URL`
+- `OMNIFORUM_SECURE_COOKIES=1`
+- `OMNIFORUM_DISCORD_WEBHOOK_URL` if you want Discord staff notifications
+### 5. Confirm Python is available
 
 ```bash
 python3 --version
@@ -147,7 +185,17 @@ python3 --version
 
 If Python is not installed, install Python 3 through your server's package manager first.
 
-### 5. Make sure the app can write to `data/`
+### 6. Create a virtual environment and install dependencies
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+Keep using this virtual environment for direct test runs and for your production service command.
+
+### 7. Make sure the app can write to `data/`
 
 OmniForum must be able to write inside the project folder, especially:
 
@@ -158,19 +206,20 @@ OmniForum must be able to write inside the project folder, especially:
 
 If needed, fix ownership and permissions for the account that will run the app.
 
-### 6. Test-run the app directly
+### 8. Test-run the app directly
 
 From the project root, run:
 
 ```bash
-python3 app.py
+source .venv/bin/activate
+python app.py
 ```
 
 If it starts, open the server locally or through your tunnel/proxy and make sure the homepage loads.
 
 Press `Ctrl+C` to stop it after testing.
 
-### 7. Create a systemd service so the site stays running
+### 9. Create a systemd service so the site stays running
 
 Create:
 
@@ -192,7 +241,7 @@ WorkingDirectory=/var/www/omniforum
 Environment=OMNIFORUM_HOST=127.0.0.1
 Environment=OMNIFORUM_PORT=8000
 Environment=OMNIFORUM_SECURE_COOKIES=1
-ExecStart=/usr/bin/python3 /var/www/omniforum/app.py
+ExecStart=/var/www/omniforum/.venv/bin/python /var/www/omniforum/app.py
 Restart=always
 RestartSec=3
 
@@ -209,7 +258,7 @@ sudo systemctl start omniforum
 sudo systemctl status omniforum
 ```
 
-### 8. Put nginx in front of OmniForum
+### 9. Put nginx in front of OmniForum
 
 Copy the example config from:
 
@@ -229,13 +278,13 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 9. Point your domain to the server
+### 10. Point your domain to the server
 
 Update your DNS so your domain points to your server's IP address.
 
 Then set that domain name in your nginx config.
 
-### 10. Enable HTTPS
+### 11. Enable HTTPS
 
 Set up SSL/TLS in nginx or your preferred reverse proxy.
 
@@ -245,13 +294,13 @@ When serving OmniForum over HTTPS, keep:
 OMNIFORUM_SECURE_COOKIES=1
 ```
 
-### 11. Open the website and create the first account
+### 12. Open the website and create the first account
 
 Visit your domain in the browser.
 
 If this is a fresh install, the first account created becomes the `Owner`.
 
-### 12. Create a backup after initial setup
+### 13. Create a backup after initial setup
 
 After logging in as admin/owner, open:
 
@@ -270,8 +319,13 @@ OmniForum reads a small set of environment variables at startup:
 | `OMNIFORUM_HOST` | `127.0.0.1` | Bind address for the Python server |
 | `OMNIFORUM_PORT` | `8000` | Port for the Python server |
 | `OMNIFORUM_SECURE_COOKIES` | `0` | Set to `1` behind HTTPS so session cookies use the secure flag |
+| `OMNIFORUM_PUBLIC_URL` | `http://127.0.0.1:8000` | Public base URL used in staff links and Discord webhook notices |
 | `OMNIFORUM_MAX_REQUEST_BYTES` | `50331648` | Max request body size in bytes |
 | `OMNIFORUM_BACKUP_ROTATION` | `8` | Number of backup archives to keep |
+| `OMNIFORUM_LIVE_INTERVAL_SECONDS` | `5` | SSE refresh cadence for live updates |
+| `OMNIFORUM_USER_MEDIA_LIMIT_BYTES` | `67108864` | Per-account media quota in bytes |
+| `OMNIFORUM_USER_MEDIA_LIMIT_FILES` | `80` | Per-account media file quota |
+| `OMNIFORUM_DISCORD_WEBHOOK_URL` | empty | Optional Discord webhook for staff-facing event notifications |
 
 Example:
 
@@ -279,24 +333,26 @@ Example:
 OMNIFORUM_HOST=127.0.0.1 \
 OMNIFORUM_PORT=8000 \
 OMNIFORUM_SECURE_COOKIES=1 \
-python3 app.py
+python app.py
 ```
 
 ## Data Layout
 
 Runtime data is stored under `data/`:
 
-- `users.db`: accounts, roles, recovery state, preferences, saved site theme, and avatars
-- `sessions.db`: login sessions and session audit metadata
+- `users.db`: accounts, roles, recovery state/codes, site settings, registration controls, invite codes, preferences, saved site theme, and avatars
+- `sessions.db`: login sessions, CSRF tokens, and session audit metadata
 - `sections.db`: categories and sections
 - `threads.db`: threads, poll data, bookmarks, follows
 - `posts.db`: replies, likes, reactions, media, edit history
 - `messages.db`: direct messages
 - `notifications.db`: alerts and unread notifications
-- `reports.db`: reports and appeals
+- `reports.db`: reports, appeals, report internal notes, and saved moderation macros
+- `audit.db`: searchable admin audit trail plus lightweight search analytics for moderation, signup, content, section, plugin, and operations actions
 - `contact.db`: contact form submissions and staff inbox state
 - `uploads/avatars/`: profile pictures
 - `uploads/posts/`: thread/reply images and GIFs
+- `uploads/thumbs/`: generated thumbnails for inline post media
 - `exports/backups/`: admin-created backups
 - `logs/server.log`: lightweight request and operations log
 
@@ -336,6 +392,7 @@ An example nginx config is included at `deploy/nginx-omniforum.conf`.
 5. Set `OMNIFORUM_SECURE_COOKIES=1` when serving over HTTPS.
 6. Point the proxy at the local OmniForum process and allow `/`, `/media/`, and `/exports/`.
 7. Verify the homepage or `/api/health` after deployment.
+8. Check `/robots.txt` and `/sitemap.xml` once your public URL is set.
 
 ## Features
 
@@ -346,22 +403,31 @@ An example nginx config is included at `deploy/nginx-omniforum.conf`.
 - Post quoting
 - Rich post formatting with markdown-style and BBCode-style content
 - Image/GIF uploads in new threads and replies
+- Server-side media processing with resize/compression, metadata stripping, and generated thumbnails
 - Polls inside threads
 - Saved threads and thread follows
 - Related threads and trending threads
+- Featured threads and community spotlight surfaces
 - Search across content
 
 ### Accounts and Profiles
 
 - Registration and login
+- Invite-only registration, admin approval review, throttling, and blocked username patterns
 - Persistent cookie sessions
 - Profile pictures
 - Signatures
 - Profile badge and accent customization
 - Saved site theme preference in Settings
 - Password change and temporary-password reset flow
+- One-time recovery codes for email-free account recovery
+- Optional recovery Discord username for admin verification notes
 - Session review and sign-out-other-sessions tools
 - DM privacy and notification preferences
+- Draft recovery for locally saved thread and reply drafts
+- Account data export from Settings
+- Ignored-content and blocked-DM member controls
+- Sensitive-media, compact-layout, and ignored-content presentation toggles
 
 ### Appearance and Personalization
 
@@ -369,29 +435,44 @@ An example nginx config is included at `deploy/nginx-omniforum.conf`.
 - 15 preset color schemes built into the forum
 - Live theme preview before saving
 - Theme preference saved per account and re-applied after login/refresh
+- Admin branding editor for site name, logo text/mark, hero copy, footer links, SEO defaults, policy intros, upload policy, feature toggles, and default theme
 
 ### Messaging and Alerts
 
 - Direct messages
 - Unread counts
-- Notifications for replies, likes, mentions, DMs, reports, and staff actions
+- Filtered notifications for replies, likes, mentions, DMs, reports, appeals, contact notices, signups, and staff actions
+- Live updates over Server-Sent Events for alerts, section activity, and thread replies
 
 ### Moderation and Staff Tools
 
 - Reports queue
 - Appeals queue
 - Staff inbox for contact form submissions
+- Saved moderation macros for consistent report triage notes
+- Report internal discussion notes, private staff assignments, SLA labels, and escalation tracking
 - Warnings, notes, XP adjustments, timeouts, bans, mutes, and shadow mutes
 - Role changes with audit history
-- Thread moderation, lock/pin/solve controls, and section permissions
+- Thread moderation, lock/pin/feature/solve controls, split/merge/move tools, staff-only thread notes, and section permissions
+- Moderation analytics in Operations
+- Trash/recovery view for soft-deleted threads and replies
+- Optional Discord webhook notifications for new staff-facing events
 
 ### Admin Operations
 
+- Signup Controls for public/open, invite-only, closed, and approval-queue registration modes
+- First-run setup wizard for site name, branding, policy copy, registration mode, section layout, theme default, and first backup
+- Admin import/export tools for users, threads, posts, reports, moderation logs, and settings as JSON/CSV with no-write import previews
 - Backup archive creation
-- Request and storage health view
+- Downloadable backup inventory in Operations
+- Guided restore checklist and copyable restore command in Operations
+- Production health dashboard with database size, media usage, backup status, latest errors, queue counts, plugin status, onboarding checklist, production install checks, analytics, and recovery readiness
+- Searchable Audit Log in Operations for moderation, signup, content, section, plugin, and operations actions
 - Runtime logs view
 - Orphaned media cleanup
 - Section management
+- Plugin enable/disable controls with manifest-declared asset loading rules
+- Recovery/restore controls for soft-deleted content
 
 ## Roles
 
@@ -406,7 +487,9 @@ Sections can be hidden entirely from users who do not meet the section read role
 
 - There is no email stack in the current build
 - Admins and the owner can issue a temporary password for account recovery
-- Temporary passwords force the user to reset their password after login
+- Temporary passwords expire, force the user to reset their password after login, and create an audit trail
+- Users can generate one-time recovery codes from Settings and use them from the login form if they forget their password
+- Users can save a Discord username in Settings for admin verification notes
 - The contact form supports an optional Discord username so staff have an off-site handle to reference
 
 ## Backups and Restore
@@ -419,22 +502,53 @@ Each backup archive includes:
 - uploaded media
 - the request/operations log when present
 
-Basic restore flow:
+Guided restore flow:
 
 1. Stop the server.
-2. Make a safety copy of the current `data/` folder.
-3. Extract the chosen backup so its `data/` contents replace the current runtime files.
+2. Open `Settings -> Operations` and use `Restore Guide` on the archive you want.
+3. Run `scripts/restore_omniforum.sh /absolute/path/to/archive.zip /absolute/path/to/project`.
 4. Start OmniForum again.
-5. Verify the homepage or `/api/health`.
+5. Verify the homepage, `/api/health`, and an admin login.
 
 ## Operations and Maintenance
 
 - Runtime logs: `data/logs/server.log`
+- First-run setup wizard: `Settings -> Operations -> Setup Wizard`
+- Import/export and preview tools: `Settings -> Operations -> Import / Export`
+- Staff workflow macros: `Settings -> Operations -> Staff Workflows`
 - Media cleanup: `Settings -> Operations -> Media Cleanup`
 - Backups: `data/exports/backups/`
 - Private uploads: `data/uploads/`
+- Restore script: `scripts/restore_omniforum.sh`
+- Production health dashboard: `Settings -> Operations`
 
 For more detailed operational notes, see `docs/OPERATIONS.md`.
+
+## Tests
+
+Run the backend smoke suite from the project root:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Run the browser smoke suite with Playwright:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python -m playwright install chromium
+python -m unittest tests.test_browser_smoke -v
+```
+
+Current coverage includes:
+
+- registration, login, profile/settings update, posting, moderation, backups, and restore-guide APIs
+- plugin enable/disable behavior and safe asset serving
+- one-shot SSE stream verification
+- public page availability plus `robots.txt` and `sitemap.xml`
+- browser automation for login, posting, uploads, replies, DMs, reports, moderation, settings, admin operations, plugin controls, section management, and mobile overflow checks
 
 ## Project Layout
 
@@ -447,6 +561,7 @@ css/                    Shared styles
 data/                   Runtime databases, uploads, backups, logs
 deploy/                 Deployment examples
 docs/                   Extra operational notes
+scripts/                Helper maintenance scripts
 ```
 
 ## Important Notes
@@ -456,3 +571,4 @@ docs/                   Extra operational notes
 - Production should always run behind HTTPS
 - Only `/media/...` and `/exports/...` should be exposed through the app
 - The rest of `data/` should never be served directly
+- Example deployment files are included: `.env.example`, `Dockerfile`, `docker-compose.yml`, `deploy/omniforum.service`, `deploy/nginx-omniforum.conf`, and `scripts/backup_omniforum.sh`

@@ -4,7 +4,9 @@ let homeData = {
   topMembers: [],
   activity: [],
   announcements: [],
+  featuredThreads: [],
 };
+let homeLiveRefreshTimer = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   refreshCurrentPage();
@@ -22,15 +24,37 @@ async function refreshCurrentPage() {
     renderHeroStats(data.stats);
     renderTicker(data.announcements);
     renderTrendingThreads(data.trendingThreads || []);
+    renderFeaturedThreads(data.featuredThreads || []);
     renderFooterYear();
     renderForumCategories(data.categories);
+    applySiteConfig(data.site || {});
+    setPageMetadata({
+      title: data.site?.seoTitle || "OmniForum — Community Hub",
+      description: data.site?.seoDescription || `${fmtNum(data.stats?.members || 0)} members, ${fmtNum(data.stats?.threads || 0)} threads, and ${fmtNum(data.stats?.posts || 0)} posts across the OmniForum community.`,
+      canonicalPath: "/",
+      type: "website",
+    });
   } catch (err) {
     const container = document.getElementById("forumCategories");
     if (container) {
       container.innerHTML = renderEmptyState("⚠️", "Could not load the forum.", err.message || "Please try refreshing the page.");
     }
+    setPageMetadata({
+      title: "OmniForum — Community Hub",
+      description: "Browse the latest discussions, featured threads, and community activity on OmniForum.",
+      canonicalPath: "/",
+      type: "website",
+    });
     toast(err.message || "Could not load the forum.", "error");
   }
+}
+
+function scheduleHomeLiveRefresh() {
+  if (homeLiveRefreshTimer) return;
+  homeLiveRefreshTimer = window.setTimeout(async () => {
+    homeLiveRefreshTimer = null;
+    await refreshCurrentPage();
+  }, 900);
 }
 
 function renderTrendingThreads(items = []) {
@@ -92,6 +116,43 @@ function renderTrendingThreads(items = []) {
             </button>
           `;
         }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderFeaturedThreads(items = []) {
+  const container = document.getElementById("featuredThreads");
+  if (!container) return;
+  if (!items.length) {
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = `
+    <section class="featured-thread-panel">
+      <div class="featured-thread-head">
+        <div>
+          <div class="trending-thread-kicker">Community Spotlight</div>
+          <h3 class="trending-thread-heading">Featured Threads</h3>
+          <p class="trending-thread-subtitle">Pinned, helpful, or high-signal discussions worth a closer look.</p>
+        </div>
+      </div>
+      <div class="featured-thread-grid">
+        ${items.map((thread) => `
+          <button class="featured-thread-card" onclick="goToThread(${JSON.stringify(thread.id)})">
+            <div class="thread-badges featured-thread-badges">${renderThreadBadges(thread)}</div>
+            <div class="featured-thread-title">${escapeHtml(thread.title)}</div>
+            <div class="featured-thread-meta">
+              <span>${escapeHtml(thread.section.name)}</span>
+              <span>${escapeHtml(formatRelativeTime(thread.updatedAt))}</span>
+            </div>
+            <div class="featured-thread-stats">
+              <span>${fmtNum(thread.replies)} replies</span>
+              <span>${fmtNum(thread.views)} views</span>
+              <span>${fmtNum((thread.tags || []).length)} tags</span>
+            </div>
+          </button>
+        `).join("")}
       </div>
     </section>
   `;
@@ -172,3 +233,14 @@ function openSectionEditorFromHome(sectionId, clickEvent) {
 
 window.openSectionEditorFromHome = openSectionEditorFromHome;
 window.refreshCurrentPage = refreshCurrentPage;
+window.handleLiveSnapshot = (snapshot) => {
+  const incoming = snapshot?.stats || {};
+  const current = homeData?.stats || {};
+  if (
+    Number(incoming.members || 0) !== Number(current.members || 0)
+    || Number(incoming.threads || 0) !== Number(current.threads || 0)
+    || Number(incoming.posts || 0) !== Number(current.posts || 0)
+  ) {
+    scheduleHomeLiveRefresh();
+  }
+};

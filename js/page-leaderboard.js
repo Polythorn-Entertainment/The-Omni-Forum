@@ -35,11 +35,23 @@ async function refreshCurrentPage() {
     document.querySelectorAll(".sort-tab").forEach((tab) => {
       tab.classList.toggle("active", tab.dataset.metric === leaderboardMetric);
     });
+    setPageMetadata({
+      title: "OmniForum — Leaderboard",
+      description: `See the top OmniForum members ranked by ${leaderboardMetric}.`,
+      canonicalPath: `/pages/leaderboard.html${window.location.search || ""}`,
+      type: "website",
+    });
   } catch (err) {
     const list = document.getElementById("leaderboardList");
     const podium = document.getElementById("podium");
     if (podium) podium.innerHTML = "";
     if (list) list.innerHTML = renderEmptyState("⚠️", "Could not load the leaderboard.", err.message || "Please try again.");
+    setPageMetadata({
+      title: "OmniForum — Leaderboard",
+      description: "Track the most active members and community standings on OmniForum.",
+      canonicalPath: `/pages/leaderboard.html${window.location.search || ""}`,
+      type: "website",
+    });
   }
 }
 

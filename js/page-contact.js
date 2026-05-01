@@ -12,6 +12,12 @@ async function refreshCurrentPage() {
   renderSidebarUser();
   renderFooterYear();
   hydrateContactForm();
+  setPageMetadata({
+    title: "OmniForum — Contact",
+    description: "Send a support, moderation, or account help request to OmniForum staff, with optional Discord contact details.",
+    canonicalPath: `${window.location.pathname}${window.location.search || ""}`,
+    type: "website",
+  });
 }
 
 function hydrateContactForm() {

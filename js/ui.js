@@ -24,19 +24,27 @@ async function copyTextValue(value, label = "Value") {
 
 const modalState = {
   dismissible: true,
+  lastFocus: null,
 };
 
 function openModal(html, options = {}) {
   const modal = document.getElementById("modal");
   const overlay = document.getElementById("modalOverlay");
   if (!modal || !overlay) return;
+  modalState.lastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   modal.classList.remove("modal-lg");
   modal.classList.remove("modal-xl");
   if (options.size === "lg") modal.classList.add("modal-lg");
   if (options.size === "xl") modal.classList.add("modal-xl");
   modalState.dismissible = options.dismissible !== false;
   modal.innerHTML = html;
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
   overlay.classList.remove("hidden");
+  window.setTimeout(() => {
+    const focusTarget = modal.querySelector("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+    focusTarget?.focus();
+  }, 0);
 }
 
 function closeModal(event, force = false) {
@@ -46,14 +54,162 @@ function closeModal(event, force = false) {
   if (!event || event.target === overlay) {
     modalState.dismissible = true;
     overlay.classList.add("hidden");
+    modalState.lastFocus?.focus?.();
+    modalState.lastFocus = null;
   }
 }
+
+function applyViewerPresentationPreferences(user) {
+  const root = document.documentElement;
+  root.dataset.compactPosts = user?.preferences?.compactPostLayout ? "1" : "0";
+  root.dataset.hideIgnoredContent = user?.preferences?.hideIgnoredContent === false ? "0" : "1";
+  root.dataset.blurSensitiveMedia = user?.preferences?.blurSensitiveMedia === false ? "0" : "1";
+}
+
+let activeSiteConfig = {
+  siteName: "OmniForum",
+  logoText: "OmniForum",
+  logoMark: "◈",
+  heroEyebrow: "Welcome to",
+  heroTitle: "OmniForum",
+  heroSubtitle: "A community built for thinkers, creators, and builders.",
+  footerCopy: "Community Forum · Built with passion",
+  defaultTheme: "midnight",
+  footerLinks: [
+    { label: "Rules", url: "/pages/rules.html" },
+    { label: "Privacy", url: "/pages/privacy.html" },
+    { label: "Contact", url: "/pages/contact.html" },
+  ],
+};
+
+function heroTitleMarkup(title) {
+  const cleanTitle = String(title || "OmniForum");
+  const forumIndex = cleanTitle.toLowerCase().lastIndexOf("forum");
+  if (forumIndex > 0) {
+    return `${escapeHtml(cleanTitle.slice(0, forumIndex))}<span class="title-accent">${escapeHtml(cleanTitle.slice(forumIndex))}</span>`;
+  }
+  return escapeHtml(cleanTitle);
+}
+
+function getSiteDefaultTheme() {
+  return resolveSiteTheme(activeSiteConfig.defaultTheme || "midnight");
+}
+
+function applySiteConfig(site = {}) {
+  activeSiteConfig = { ...activeSiteConfig, ...(site || {}) };
+  const logoMark = activeSiteConfig.logoMark || "◈";
+  const logoText = activeSiteConfig.logoText || activeSiteConfig.siteName || "OmniForum";
+  document.querySelectorAll(".logo-mark").forEach((node) => {
+    node.textContent = logoMark;
+  });
+  document.querySelectorAll(".logo-text:not(.footer-logo)").forEach((node) => {
+    node.textContent = logoText;
+  });
+  document.querySelectorAll(".footer-logo").forEach((node) => {
+    node.textContent = `${logoMark} ${logoText}`;
+  });
+  document.querySelectorAll(".hero-eyebrow").forEach((node) => {
+    if (node.closest(".forum-hero")) node.textContent = activeSiteConfig.heroEyebrow || "Welcome to";
+  });
+  document.querySelectorAll(".hero-title").forEach((node) => {
+    node.innerHTML = heroTitleMarkup(activeSiteConfig.heroTitle || logoText);
+  });
+  document.querySelectorAll(".hero-sub").forEach((node) => {
+    node.textContent = activeSiteConfig.heroSubtitle || "";
+  });
+  document.querySelectorAll(".footer-copy").forEach((node) => {
+    const year = node.querySelector("#footerYear")?.textContent || new Date().getFullYear();
+    node.innerHTML = `${escapeHtml(activeSiteConfig.footerCopy || "")} · <span id="footerYear">${escapeHtml(year)}</span>`;
+  });
+  document.querySelectorAll(".footer-links").forEach((node) => {
+    const links = Array.isArray(activeSiteConfig.footerLinks) ? activeSiteConfig.footerLinks : [];
+    if (links.length) {
+      node.innerHTML = links.map((link) => `<a href="${escapeHtml(link.url || "#")}">${escapeHtml(link.label || "Link")}</a>`).join("");
+    }
+  });
+  const legalCopy = document.querySelector(".legal-hero .muted-copy");
+  if (legalCopy) {
+    if (window.location.pathname.endsWith("/rules.html") && activeSiteConfig.rulesCopy) legalCopy.textContent = activeSiteConfig.rulesCopy;
+    if (window.location.pathname.endsWith("/privacy.html") && activeSiteConfig.privacyCopy) legalCopy.textContent = activeSiteConfig.privacyCopy;
+    if (window.location.pathname.endsWith("/contact.html") && activeSiteConfig.contactCopy) legalCopy.textContent = activeSiteConfig.contactCopy;
+  }
+  try {
+    const storedTheme = window.localStorage.getItem(SITE_THEME_STORAGE_KEY);
+    if (!Auth.getCurrentUser?.()?.preferences?.siteTheme && !storedTheme) {
+      applySiteTheme(activeSiteConfig.defaultTheme || "midnight", { storage: "ignore" });
+    }
+  } catch {
+    applySiteTheme(activeSiteConfig.defaultTheme || "midnight", { storage: "ignore" });
+  }
+}
+
+async function loadSiteConfig() {
+  try {
+    const data = await API.getSite();
+    applySiteConfig(data.site || {});
+  } catch {
+    applySiteConfig(activeSiteConfig);
+  }
+}
+
+function installAccessibilityShell() {
+  const root = document.getElementById("app") || document.body;
+  if (!document.querySelector(".skip-link")) {
+    const link = document.createElement("a");
+    link.href = "#mainContent";
+    link.className = "skip-link";
+    link.textContent = "Skip to main content";
+    document.body.insertBefore(link, document.body.firstChild);
+  }
+  const main = document.querySelector("main");
+  if (main) {
+    main.id = main.id || "mainContent";
+    main.tabIndex = -1;
+  }
+  const toastContainer = document.getElementById("toastContainer");
+  if (toastContainer) {
+    toastContainer.setAttribute("aria-live", "polite");
+    toastContainer.setAttribute("aria-atomic", "true");
+  }
+  root?.setAttribute?.("data-js-ready", "true");
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  installAccessibilityShell();
+  loadSiteConfig();
+  applyViewerPresentationPreferences(Auth.getCurrentUser?.() || null);
+  loadEnabledPlugins();
+  startLiveUpdates();
+});
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeNavMenu();
     closeModal();
     return;
+  }
+  if (event.key === "Tab") {
+    const overlay = document.getElementById("modalOverlay");
+    const modal = document.getElementById("modal");
+    if (overlay && modal && !overlay.classList.contains("hidden")) {
+      const focusable = Array.from(
+        modal.querySelectorAll("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"),
+      ).filter((node) => !node.hasAttribute("disabled"));
+      if (focusable.length) {
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+          return;
+        }
+        if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+          return;
+        }
+      }
+    }
   }
   if (isTypingTarget(event.target)) return;
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -101,11 +257,13 @@ const navMenuState = {
 const notificationState = {
   items: [],
   status: "all",
+  kind: "all",
 };
 
 const reportQueueState = {
   items: [],
   status: "open",
+  macros: [],
 };
 
 const appealQueueState = {
@@ -118,6 +276,18 @@ const searchState = {
   requestId: 0,
 };
 
+const liveState = {
+  eventSource: null,
+  key: "",
+  reconnectTimer: null,
+  reconnectDelay: 1500,
+};
+
+const pluginState = {
+  styles: new Set(),
+  scripts: new Set(),
+};
+
 function isTypingTarget(target) {
   const tag = target?.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target?.isContentEditable;
@@ -128,10 +298,11 @@ function navAttentionCount(user) {
   return [
     Number(user.notificationCount || 0),
     Number(user.messageCount || 0),
-    Number(user.reportCount || 0),
-    Number(user.noticeCount || 0),
-    Number(user.appealCount || 0),
-  ].reduce((sum, count) => sum + count, 0);
+        Number(user.reportCount || 0),
+        Number(user.noticeCount || 0),
+        Number(user.appealCount || 0),
+        Number(user.registrationCount || 0),
+      ].reduce((sum, count) => sum + count, 0);
 }
 
 function settingsPageHref() {
@@ -140,6 +311,104 @@ function settingsPageHref() {
   }
   const prefix = window.location.pathname.includes("/pages/") ? "" : "pages/";
   return `${prefix}settings.html`;
+}
+
+function currentLiveQuery() {
+  if (typeof window.getLiveContext === "function") {
+    const context = window.getLiveContext() || {};
+    return {
+      threadId: context.threadId || "",
+      section: context.section || "",
+    };
+  }
+  return {};
+}
+
+function closeLiveUpdates() {
+  if (liveState.eventSource) {
+    liveState.eventSource.close();
+    liveState.eventSource = null;
+  }
+  if (liveState.reconnectTimer) {
+    window.clearTimeout(liveState.reconnectTimer);
+    liveState.reconnectTimer = null;
+  }
+}
+
+function scheduleLiveReconnect() {
+  closeLiveUpdates();
+  liveState.reconnectTimer = window.setTimeout(() => {
+    liveState.reconnectTimer = null;
+    startLiveUpdates({ force: true });
+  }, liveState.reconnectDelay);
+  liveState.reconnectDelay = Math.min(liveState.reconnectDelay * 1.5, 12000);
+}
+
+function applyLiveSnapshot(snapshot = {}) {
+  if (Object.prototype.hasOwnProperty.call(snapshot, "currentUser")) {
+    Auth.setCurrentUser(snapshot.currentUser || null);
+  } else {
+    renderNavActions();
+    renderSidebarUser();
+  }
+  if (typeof window.handleLiveSnapshot === "function") {
+    window.handleLiveSnapshot(snapshot);
+  }
+}
+
+function startLiveUpdates(options = {}) {
+  if (!("EventSource" in window)) return;
+  const query = currentLiveQuery();
+  const key = JSON.stringify(query);
+  if (!options.force && liveState.eventSource && liveState.key === key) {
+    return;
+  }
+  closeLiveUpdates();
+  liveState.key = key;
+  liveState.reconnectDelay = 1500;
+  const source = new EventSource(`/api/live/stream${buildQuery(query)}`);
+  liveState.eventSource = source;
+  source.addEventListener("snapshot", (event) => {
+    try {
+      const snapshot = JSON.parse(event.data || "{}");
+      applyLiveSnapshot(snapshot);
+    } catch {
+      // Ignore malformed stream payloads and wait for the next frame.
+    }
+  });
+  source.addEventListener("ping", () => {});
+  source.onerror = () => {
+    scheduleLiveReconnect();
+  };
+}
+
+async function loadEnabledPlugins() {
+  try {
+    const data = await API.getPlugins();
+    const plugins = data.plugins || [];
+    plugins.forEach((plugin) => {
+      (plugin.styles || []).forEach((href) => {
+        if (pluginState.styles.has(href)) return;
+        pluginState.styles.add(href);
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = href;
+        link.dataset.pluginHref = href;
+        document.head.appendChild(link);
+      });
+      (plugin.scripts || []).forEach((src) => {
+        if (pluginState.scripts.has(src)) return;
+        pluginState.scripts.add(src);
+        const script = document.createElement("script");
+        script.src = src;
+        script.defer = true;
+        script.dataset.pluginSrc = src;
+        document.body.appendChild(script);
+      });
+    });
+  } catch {
+    // Plugin assets are optional; skip quietly if the endpoint is unavailable.
+  }
 }
 
 function closeNavMenu() {
@@ -173,9 +442,10 @@ function renderNavActions() {
   if (user) {
     const notificationCount = Number(user.notificationCount || 0);
     const messageCount = Number(user.messageCount || 0);
-    const reportCount = Number(user.reportCount || 0);
-    const noticeCount = Number(user.noticeCount || 0);
-    const appealCount = Number(user.appealCount || 0);
+        const reportCount = Number(user.reportCount || 0);
+        const noticeCount = Number(user.noticeCount || 0);
+        const appealCount = Number(user.appealCount || 0);
+        const registrationCount = Number(user.registrationCount || 0);
     const attentionCount = navAttentionCount(user);
     const attentionBadge = attentionCount ? `<span class="notice-pill">${attentionCount}</span>` : "";
     const staffTools = Auth.isStaff()
@@ -202,15 +472,15 @@ function renderNavActions() {
           <span class="nav-menu-item-main">Section Editor</span>
           <span class="nav-menu-item-meta">Admin+</span>
         </button>
-        <button class="nav-menu-item" onclick="closeNavMenu(); showAdminOpsModal()">
-          <span class="nav-menu-item-main">Operations</span>
-          <span class="nav-menu-item-meta">Health</span>
-        </button>
+            <button class="nav-menu-item" onclick="closeNavMenu(); showAdminOpsModal()">
+              <span class="nav-menu-item-main">Operations</span>
+              ${registrationCount ? `<span class="nav-menu-item-badge">${registrationCount}</span>` : '<span class="nav-menu-item-meta">Health</span>'}
+            </button>
       `
       : "";
     container.innerHTML = `
       <div class="nav-menu ${isOpen ? "open" : ""}">
-        <button class="nav-menu-trigger ${attentionCount ? "has-alert" : ""}" onclick="toggleNavMenu(event)" aria-expanded="${isOpen ? "true" : "false"}">
+        <button class="nav-menu-trigger ${attentionCount ? "has-alert" : ""}" onclick="toggleNavMenu(event)" aria-expanded="${isOpen ? "true" : "false"}" aria-haspopup="menu" aria-label="Open account menu">
           ${makeAvatar(user, "xs")}
           <span class="nav-menu-label">
             <span class="nav-menu-username">${escapeHtml(user.username)}</span>
@@ -320,6 +590,7 @@ function renderSidebarUser() {
       <div class="user-meta">
         <div class="user-name">${escapeHtml(user.username)}</div>
         ${roleBadge(user.role)}
+        ${user.statusText ? `<div class="tiny-copy">${escapeHtml(user.statusText)}</div>` : ""}
       </div>
     </div>
     <div class="user-stats-grid">
@@ -396,7 +667,7 @@ function renderTopMembers(members = []) {
         ${makeAvatar(user, "xs")}
         <div class="member-info">
           <div class="member-name">${escapeHtml(user.username)}</div>
-          <div class="member-posts">${fmtNum(user.posts || 0)} posts</div>
+          <div class="member-posts">${user.statusText ? escapeHtml(user.statusText) : `${fmtNum(user.posts || 0)} posts`}</div>
         </div>
         ${roleBadge(user.role)}
       </li>
@@ -445,6 +716,11 @@ function showLoginModal() {
       <label class="form-label">Password</label>
       <input class="form-input" id="loginPassword" type="password" placeholder="Your password" autocomplete="current-password">
     </div>
+    <div class="form-group">
+      <label class="form-label">Recovery Code</label>
+      <input class="form-input" id="loginRecoveryCode" type="text" placeholder="Optional one-time code if you forgot your password" autocomplete="one-time-code">
+      <div class="form-hint">Use this instead of a password only if you previously generated recovery codes.</div>
+    </div>
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="doLogin()">Log In</button>
@@ -476,6 +752,11 @@ function showRegisterModal() {
     <div class="form-group">
       <label class="form-label">Confirm Password</label>
       <input class="form-input" id="regConfirm" type="password" placeholder="Confirm your password">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Invite Code</label>
+      <input class="form-input" id="regInviteCode" type="text" placeholder="Optional unless the forum is invite-only" autocomplete="off">
+      <div class="form-hint">If staff gave you an invite, enter it here. Some communities also require admin approval.</div>
     </div>
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -517,6 +798,10 @@ function showForcedPasswordResetModal() {
 
 function handleAuthStateChanged(user) {
   closeNavMenu();
+  applyViewerPresentationPreferences(user);
+  renderNavActions();
+  renderSidebarUser();
+  startLiveUpdates();
   if (user?.mustResetPassword) {
     window.setTimeout(() => {
       if (Auth.mustResetPassword()) {
@@ -531,10 +816,11 @@ async function doLogin() {
   const error = document.getElementById("loginError");
   const username = document.getElementById("loginUsername")?.value?.trim();
   const password = document.getElementById("loginPassword")?.value || "";
+  const recoveryCode = document.getElementById("loginRecoveryCode")?.value?.trim() || "";
   if (error) error.classList.remove("visible");
 
   try {
-    const user = await Auth.login(username, password);
+    const user = await Auth.login(username, password, recoveryCode);
     closeModal(null, true);
     toast(user.mustResetPassword ? `Welcome back, ${user.username}. Please set a new password.` : `Welcome back, ${user.username}.`, "success");
     await refreshApp();
@@ -551,6 +837,7 @@ async function doRegister() {
   const username = document.getElementById("regUsername")?.value?.trim();
   const password = document.getElementById("regPassword")?.value || "";
   const confirm = document.getElementById("regConfirm")?.value || "";
+  const inviteCode = document.getElementById("regInviteCode")?.value?.trim() || "";
   if (error) error.classList.remove("visible");
 
   if (password !== confirm) {
@@ -562,8 +849,14 @@ async function doRegister() {
   }
 
   try {
-    const user = await Auth.register(username, password);
+    const data = await Auth.register(username, password, inviteCode);
     closeModal();
+    if (data.pendingApproval) {
+      toast(data.message || "Account created and pending admin approval.", "success", 5200);
+      await refreshApp();
+      return;
+    }
+    const user = data.currentUser;
     toast(`Welcome to OmniForum, ${user.username}.`, "success");
     await refreshApp();
   } catch (err) {
@@ -657,6 +950,9 @@ function searchFiltersFromDom() {
     author: document.getElementById("forumSearchAuthor")?.value?.trim() || "",
     tag: document.getElementById("forumSearchTag")?.value?.trim() || "",
     solved: document.getElementById("forumSearchSolved")?.value || "all",
+    media: document.getElementById("forumSearchMedia")?.value || "all",
+    replies: document.getElementById("forumSearchReplies")?.value || "all",
+    date: document.getElementById("forumSearchDate")?.value || "all",
     sort: document.getElementById("forumSearchSort")?.value || "relevance",
   };
 }
@@ -672,10 +968,13 @@ function renderSearchSectionOptions(data = null) {
 
 function renderSearchModalBody(data = null, query = "") {
   const trimmed = query.trim();
-  if (!trimmed) {
+  const filters = data?.filters || searchFiltersFromDom?.() || {};
+  const hasActiveFilter = ["section", "author", "tag", "solved", "media", "replies", "date"]
+    .some((key) => filters[key] && filters[key] !== "all");
+  if (!trimmed && !hasActiveFilter) {
     return renderEmptyState("⌘", "Search the forum.", "Find threads, posts, and members from anywhere.");
   }
-  if (trimmed.length < 2) {
+  if (trimmed.length > 0 && trimmed.length < 2) {
     return renderEmptyState("🔎", "Keep typing.", "Use at least 2 characters for search.");
   }
   if (!data) {
@@ -735,6 +1034,31 @@ function renderSearchModal(data = null, query = "") {
         </select>
       </div>
       <div class="form-group">
+        <label class="form-label">Media</label>
+        <select class="form-input" id="forumSearchMedia">
+          <option value="all"${(filters.media || "all") === "all" ? " selected" : ""}>Any</option>
+          <option value="with_media"${filters.media === "with_media" ? " selected" : ""}>Has images/GIFs</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Replies</label>
+        <select class="form-input" id="forumSearchReplies">
+          <option value="all"${(filters.replies || "all") === "all" ? " selected" : ""}>Any</option>
+          <option value="unanswered"${filters.replies === "unanswered" ? " selected" : ""}>Unanswered</option>
+          <option value="answered"${filters.replies === "answered" ? " selected" : ""}>Answered</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <select class="form-input" id="forumSearchDate">
+          <option value="all"${(filters.date || "all") === "all" ? " selected" : ""}>Any time</option>
+          <option value="today"${filters.date === "today" ? " selected" : ""}>Past day</option>
+          <option value="week"${filters.date === "week" ? " selected" : ""}>Past week</option>
+          <option value="month"${filters.date === "month" ? " selected" : ""}>Past month</option>
+          <option value="year"${filters.date === "year" ? " selected" : ""}>Past year</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label class="form-label">Sort</label>
         <select class="form-input" id="forumSearchSort">
           <option value="relevance"${(filters.sort || "relevance") === "relevance" ? " selected" : ""}>Relevance</option>
@@ -759,7 +1083,7 @@ async function showSearchModal(initialQuery = "") {
     input.focus();
     input.select();
   }, 50);
-  ["forumSearchInput", "forumSearchSection", "forumSearchAuthor", "forumSearchTag", "forumSearchSolved", "forumSearchSort"]
+  ["forumSearchInput", "forumSearchSection", "forumSearchAuthor", "forumSearchTag", "forumSearchSolved", "forumSearchMedia", "forumSearchReplies", "forumSearchDate", "forumSearchSort"]
     .map((id) => document.getElementById(id))
     .filter(Boolean)
     .forEach((node) => {
@@ -784,7 +1108,13 @@ async function performGlobalSearch() {
   const query = filters.q || "";
   const requestId = ++searchState.requestId;
   container.innerHTML = renderSearchModalBody(null, query);
-  if (query.trim().length < 2) {
+  const hasActiveFilter = ["section", "author", "tag", "solved", "media", "replies", "date"]
+    .some((key) => filters[key] && filters[key] !== "all");
+  if (query.trim().length > 0 && query.trim().length < 2) {
+    container.innerHTML = renderSearchModalBody(null, query);
+    return;
+  }
+  if (!query.trim() && !hasActiveFilter) {
     container.innerHTML = renderSearchModalBody(null, query);
     return;
   }
@@ -823,6 +1153,8 @@ function notificationOpenLabel(item) {
   if (item.targetType === "user") return "Open Profile";
   if (item.targetType === "report_queue") return "Open Queue";
   if (item.targetType === "appeal_queue") return "Open Appeals";
+  if (item.targetType === "contact_notice") return "Open Staff Inbox";
+  if (item.targetType === "registration_queue") return "Open Signups";
   return "Open";
 }
 
@@ -849,7 +1181,29 @@ function renderNotificationCard(item) {
   `;
 }
 
-function renderNotificationsModal(items = [], counts = { unread: 0 }, status = "all") {
+function notificationKindTabs(counts = {}, kind = "all") {
+  const tabs = [
+    ["all", "All", counts.unread || 0],
+    ["replies", "Replies", counts.replies || 0],
+    ["mentions", "Mentions", counts.mentions || 0],
+    ["dms", "DMs", counts.dms || 0],
+    ["likes", "Likes", counts.likes || 0],
+    ["staff_actions", "Staff Actions", counts.staffActions || 0],
+  ];
+  if (Auth.isStaff()) tabs.push(["staff", "Staff Queues", counts.staff || 0]);
+  return `
+    <div class="notice-kind-tabs">
+      ${tabs.map(([value, label, count]) => `
+        <button class="notice-kind-tab ${kind === value ? "active" : ""}" onclick="showNotificationKind(${serializeJsArg(value)})">
+          <span>${escapeHtml(label)}</span>
+          ${count ? `<strong>${fmtNum(count)}</strong>` : ""}
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderNotificationsModal(items = [], counts = { unread: 0 }, status = "all", kind = "all") {
   const body = items.length
     ? items.map((item) => renderNotificationCard(item)).join("")
     : renderEmptyState("🔔", status === "unread" ? "No unread alerts." : "No alerts yet.");
@@ -857,15 +1211,16 @@ function renderNotificationsModal(items = [], counts = { unread: 0 }, status = "
     <button class="modal-close" onclick="closeModal()">✕</button>
     <div class="modal-title">Alerts</div>
     <div class="sort-tabs notice-filter-tabs">
-      <button class="sort-tab ${status === "all" ? "active" : ""}" onclick="showNotifications('all')">All</button>
-      <button class="sort-tab ${status === "unread" ? "active" : ""}" onclick="showNotifications('unread')">Unread (${counts.unread || 0})</button>
+      <button class="sort-tab ${status === "all" ? "active" : ""}" onclick="showNotificationStatus('all')">All</button>
+      <button class="sort-tab ${status === "unread" ? "active" : ""}" onclick="showNotificationStatus('unread')">Unread (${counts.unread || 0})</button>
     </div>
+    ${notificationKindTabs(counts, kind)}
     ${counts.unread ? `<div class="form-actions notification-toolbar"><button class="btn btn-ghost btn-sm" onclick="markAllNotificationsRead()">Mark All Read</button></div>` : ""}
     <div class="notification-list">${body}</div>
   `;
 }
 
-async function showNotifications(status = "all") {
+async function showNotifications(status = "all", kind = notificationState.kind || "all") {
   if (!Auth.getCurrentUser()) {
     showLoginModal();
     return;
@@ -876,11 +1231,12 @@ async function showNotifications(status = "all") {
     <div class="muted-copy">Loading notifications...</div>
   `, { size: "xl" });
   try {
-    const data = await API.getNotifications(status);
+    const data = await API.getNotifications({ status, kind });
     notificationState.items = data.items || [];
     notificationState.status = status;
+    notificationState.kind = data.kind || kind || "all";
     renderNavActions();
-    openModal(renderNotificationsModal(notificationState.items, data.counts || {}, status), { size: "xl" });
+    openModal(renderNotificationsModal(notificationState.items, data.counts || {}, status, notificationState.kind), { size: "xl" });
   } catch (err) {
     openModal(`
       <button class="modal-close" onclick="closeModal()">✕</button>
@@ -888,6 +1244,14 @@ async function showNotifications(status = "all") {
       ${modalError(err.message || "Could not load your notifications.")}
     `, { size: "lg" });
   }
+}
+
+function showNotificationStatus(status = "all") {
+  return showNotifications(status, notificationState.kind || "all");
+}
+
+function showNotificationKind(kind = "all") {
+  return showNotifications(notificationState.status || "all", kind);
 }
 
 async function markNotificationAsRead(notificationId) {
@@ -950,6 +1314,18 @@ async function openNotificationTarget(notificationId) {
     }
     return;
   }
+  if (item.targetType === "contact_notice") {
+    if (Auth.isStaff()) {
+      await showStaffInbox("open");
+    }
+    return;
+  }
+  if (item.targetType === "registration_queue") {
+    if (Auth.isAdmin()) {
+      await showSignupControls();
+    }
+    return;
+  }
   toast("This alert does not have a direct destination yet.", "info");
 }
 
@@ -995,6 +1371,39 @@ function selectedReportIds() {
     .filter((value) => Number.isFinite(value) && value > 0);
 }
 
+function reportMacroOptions() {
+  return [
+    '<option value="">Apply saved macro...</option>',
+    ...((reportQueueState.macros || []).filter((macro) => macro.enabled !== false).map((macro) => (
+      `<option value="${escapeHtml(String(macro.id))}">${escapeHtml(macro.title)}</option>`
+    ))),
+  ].join("");
+}
+
+function renderReportInternalNotes(notes = []) {
+  if (!notes.length) {
+    return `<div class="tiny-copy">No internal staff discussion yet.</div>`;
+  }
+  return `
+    <div class="moderation-history-list report-note-list">
+      ${notes.map((note) => `
+        <div class="moderation-history-card">
+          <div class="moderation-history-head">
+            <div>
+              <div class="moderation-history-title">${escapeHtml(note.author?.username || "Staff")}</div>
+              <div class="moderation-history-meta">
+                <span>${escapeHtml(formatDateTime(note.createdAt))}</span>
+                <span>${escapeHtml(DB.roles[note.author?.role]?.label || "Staff")}</span>
+              </div>
+            </div>
+          </div>
+          <div class="moderation-history-copy">${escapeHtml(note.note || "")}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderReportCard(item) {
   const viewer = Auth.getCurrentUser();
   const reporterButton = item.reporter
@@ -1010,6 +1419,9 @@ function renderReportCard(item) {
   const handledMeta = item.handledBy
     ? `Reviewed by ${escapeHtml(item.handledBy.username)}${item.handledAt ? ` · ${escapeHtml(formatDateTime(item.handledAt))}` : ""}`
     : "Awaiting review";
+  const slaLabel = item.slaDueAt
+    ? `${item.slaState === "overdue" ? "Overdue" : "Due"} ${formatDateTime(item.slaDueAt)}`
+    : "No SLA set";
   return `
     <div class="notice-card ${item.status === "resolved" ? "resolved" : ""}">
       <div class="notice-head">
@@ -1033,6 +1445,8 @@ function renderReportCard(item) {
       <div class="detail-list notice-detail-list">
         <div><span>Review Status</span><strong>${escapeHtml(handledMeta)}</strong></div>
         <div><span>Assigned</span><strong>${escapeHtml(item.assignedTo?.username || "Unassigned")}</strong></div>
+        <div><span>SLA</span><strong>${escapeHtml(slaLabel)}</strong></div>
+        <div><span>Escalation</span><strong>${item.escalatedAt ? `Escalated ${escapeHtml(formatDateTime(item.escalatedAt))}` : "Not escalated"}</strong></div>
       </div>
       <div class="form-row search-filter-grid">
         <div class="form-group">
@@ -1054,14 +1468,45 @@ function renderReportCard(item) {
           <label class="form-label">Resolution</label>
           <input class="form-input" id="reportResolution-${item.id}" maxlength="80" value="${escapeHtml(item.resolutionCode || "")}" placeholder="warning-issued">
         </div>
+        <div class="form-group">
+          <label class="form-label">SLA</label>
+          <select class="form-input" id="reportSla-${item.id}">
+            <option value="">Keep current</option>
+            <option value="0">Clear SLA</option>
+            <option value="24">24 hours</option>
+            <option value="72">72 hours</option>
+            <option value="168">7 days</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row search-filter-grid">
+        <div class="form-group">
+          <label class="form-label">Macro</label>
+          <select class="form-input" id="reportMacro-${item.id}" onchange="applyReportMacro(${JSON.stringify(item.id)})">${reportMacroOptions()}</select>
+        </div>
+        <label class="checkbox-row settings-checkbox-row">
+          <input type="checkbox" id="reportEscalated-${item.id}"${item.escalatedAt ? " checked" : ""}>
+          <span>Escalated for higher-priority staff follow-up</span>
+        </label>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Escalation Note</label>
+        <input class="form-input" id="reportEscalationNote-${item.id}" maxlength="500" value="${escapeHtml(item.escalationNote || "")}" placeholder="Why this needs escalation, assignment, or SLA attention">
       </div>
       <div class="form-group">
         <label class="form-label">Staff Note</label>
         <textarea class="form-textarea notice-note" id="reportNote-${item.id}" placeholder="Internal note for moderators/admins only.">${escapeHtml(item.adminNote || "")}</textarea>
       </div>
+      <div class="page-section-title" style="margin-top:12px;">Internal Discussion</div>
+      ${renderReportInternalNotes(item.internalNotes || [])}
+      <div class="form-group">
+        <label class="form-label">Add Internal Note</label>
+        <textarea class="form-textarea notice-note" id="reportInternalNote-${item.id}" placeholder="Private staff discussion, assignment context, or escalation follow-up."></textarea>
+      </div>
       <div class="notice-actions">
         ${targetButton}
         ${reporterButton}
+        <button class="btn btn-outline btn-sm" onclick="addReportInternalNote(${JSON.stringify(item.id)})">Add Internal Note</button>
         <button class="btn btn-ghost btn-sm" onclick="saveReportQueueItem(${JSON.stringify(item.id)}, ${serializeJsArg(item.status)})">Save Note</button>
         <button class="btn ${item.status === "resolved" ? "btn-ghost" : "btn-primary"} btn-sm" onclick="saveReportQueueItem(${JSON.stringify(item.id)}, ${serializeJsArg(item.status === "resolved" ? "open" : "resolved")})">
           ${item.status === "resolved" ? "Reopen" : "Resolve"}
@@ -1084,6 +1529,7 @@ async function showReportsQueue(status = "open") {
   try {
     const data = await API.getReports(status);
     reportQueueState.items = data.items || [];
+    reportQueueState.macros = data.macros || [];
     reportQueueState.status = status;
     renderNavActions();
     const body = reportQueueState.items.length
@@ -1120,8 +1566,13 @@ async function saveReportQueueItem(reportId, status) {
   const category = document.getElementById(`reportCategory-${reportId}`)?.value || "";
   const assignedTo = document.getElementById(`reportAssigned-${reportId}`)?.value || "";
   const resolutionCode = document.getElementById(`reportResolution-${reportId}`)?.value?.trim() || "";
+  const slaHours = document.getElementById(`reportSla-${reportId}`)?.value || "";
+  const escalated = Boolean(document.getElementById(`reportEscalated-${reportId}`)?.checked);
+  const escalationNote = document.getElementById(`reportEscalationNote-${reportId}`)?.value?.trim() || "";
   try {
-    await API.updateReport(reportId, { status, adminNote: note, priority, category, assignedTo, resolutionCode });
+    const payload = { status, adminNote: note, priority, category, assignedTo, resolutionCode, escalated, escalationNote };
+    if (slaHours !== "") payload.slaHours = slaHours;
+    await API.updateReport(reportId, payload);
     toast(status === "resolved" ? "Report resolved." : "Report updated.", "success");
     await showReportsQueue(status === "resolved" ? "open" : reportQueueState.status || status);
     if (typeof window.refreshCurrentPage === "function") {
@@ -1132,6 +1583,31 @@ async function saveReportQueueItem(reportId, status) {
     }
   } catch (err) {
     toast(err.message || "Could not update that report.", "error");
+  }
+}
+
+function applyReportMacro(reportId) {
+  const select = document.getElementById(`reportMacro-${reportId}`);
+  const macro = (reportQueueState.macros || []).find((item) => String(item.id) === String(select?.value || ""));
+  if (!macro) return;
+  const note = document.getElementById(`reportNote-${reportId}`);
+  if (!note) return;
+  const prefix = note.value.trim() ? `${note.value.trim()}\n\n` : "";
+  note.value = `${prefix}${macro.body || ""}`.trim();
+}
+
+async function addReportInternalNote(reportId) {
+  const note = document.getElementById(`reportInternalNote-${reportId}`)?.value?.trim() || "";
+  if (!note) {
+    toast("Write an internal note first.", "error");
+    return;
+  }
+  try {
+    await API.addReportNote(reportId, { note });
+    toast("Internal note added.", "success");
+    await showReportsQueue(reportQueueState.status || "open");
+  } catch (err) {
+    toast(err.message || "Could not add that internal note.", "error");
   }
 }
 
@@ -1265,6 +1741,218 @@ async function saveAppealQueueItem(appealId, status) {
   }
 }
 
+function opsStatusTone(status) {
+  const value = String(status || "").toLowerCase();
+  if (["healthy", "ok", "clear", "ready", "enabled", "success"].includes(value)) return "good";
+  if (["error", "critical", "failed", "missing"].includes(value)) return "bad";
+  if (["attention", "warning", "warn", "stale"].includes(value)) return "warn";
+  return "neutral";
+}
+
+function renderOpsBadge(status, label) {
+  return `<span class="ops-status-badge ${opsStatusTone(status)}">${escapeHtml(label || status || "Unknown")}</span>`;
+}
+
+function renderOpsKpi(label, value, hint = "", status = "neutral") {
+  return `
+    <div class="ops-kpi-card ${opsStatusTone(status)}">
+      <div class="ops-kpi-label">${escapeHtml(label)}</div>
+      <div class="ops-kpi-value">${escapeHtml(value)}</div>
+      ${hint ? `<div class="ops-kpi-hint">${escapeHtml(hint)}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderOpsDetailRows(rows = []) {
+  return rows
+    .filter((row) => row && row.length >= 2)
+    .map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`)
+    .join("");
+}
+
+function renderOpsLogEntries(entries = []) {
+  if (!entries.length) {
+    return '<div class="settings-empty-block">No recent errors or failed requests in the runtime log.</div>';
+  }
+  return entries.map((entry) => `
+    <div class="ops-log-entry">
+      <div class="ops-log-meta">
+        ${entry.status ? `<span>HTTP ${escapeHtml(String(entry.status))}</span>` : "<span>Runtime</span>"}
+        <span>${escapeHtml(formatDateTime(entry.time))}</span>
+      </div>
+      <code>${escapeHtml(entry.line || "")}</code>
+    </div>
+  `).join("");
+}
+
+function renderOpsChecklist(title, summary, checklist = {}) {
+  const items = checklist.items || [];
+  return `
+    <div class="settings-tool-card ops-check-card">
+      <div class="settings-tool-title">${escapeHtml(title)}</div>
+      <div class="settings-tool-copy">${escapeHtml(summary)}</div>
+      <div class="ops-check-progress">
+        ${renderOpsBadge(checklist.status || "attention", `${fmtNum(checklist.complete ?? checklist.passing ?? 0)} / ${fmtNum(checklist.total || items.length)} ready`)}
+      </div>
+      <div class="ops-check-list">
+        ${items.map((item) => `
+          <div class="ops-check-item ${item.ok ? "ok" : "attention"}">
+            <span>${item.ok ? "✓" : "!"}</span>
+            <div>
+              <strong>${escapeHtml(item.label)}</strong>
+              <small>${escapeHtml(item.detail || "")}</small>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function formatAuditLabel(value) {
+  return String(value || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function renderAuditEvent(event) {
+  const actor = event.actor || {};
+  const metaEntries = Object.entries(event.metadata || {})
+    .filter(([, value]) => value !== null && value !== "" && value !== undefined)
+    .slice(0, 5);
+  return `
+    <div class="audit-event-card">
+      <div class="audit-event-head">
+        <div>
+          <div class="audit-event-title">${escapeHtml(formatAuditLabel(event.action))}</div>
+          <div class="moderation-history-meta">
+            <span>${escapeHtml(formatAuditLabel(event.category))}</span>
+            <span>${escapeHtml(actor.username || "System")}</span>
+            <span>${escapeHtml(formatDateTime(event.createdAt))}</span>
+          </div>
+        </div>
+        ${event.targetLabel ? `<span class="ops-status-badge neutral">${escapeHtml(event.targetLabel)}</span>` : ""}
+      </div>
+      ${event.reason ? `<div class="moderation-history-copy">${escapeHtml(event.reason)}</div>` : ""}
+      <div class="audit-meta-grid">
+        ${event.targetType ? `<div><span>Target</span><strong>${escapeHtml(formatAuditLabel(event.targetType))}${event.targetId ? ` #${escapeHtml(String(event.targetId))}` : ""}</strong></div>` : ""}
+        ${actor.role ? `<div><span>Actor Role</span><strong>${escapeHtml(formatAuditLabel(actor.role))}</strong></div>` : ""}
+        ${event.ipAddress ? `<div><span>IP</span><strong>${escapeHtml(event.ipAddress)}</strong></div>` : ""}
+        ${metaEntries.map(([key, value]) => `<div><span>${escapeHtml(formatAuditLabel(key))}</span><strong>${escapeHtml(typeof value === "object" ? JSON.stringify(value) : String(value))}</strong></div>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderAuditLogModal(audit) {
+  const filters = audit.filters || {};
+  const summary = audit.summary || {};
+  const categories = audit.categories || [];
+  const categoryCounts = summary.categories || {};
+  const categoryOptions = ["", ...categories].map((category) => `
+    <option value="${escapeHtml(category)}"${filters.category === category ? " selected" : ""}>${category ? `${formatAuditLabel(category)} (${fmtNum(categoryCounts[category] || 0)})` : "All categories"}</option>
+  `).join("");
+  const targetOptions = ["", "user", "thread", "post", "section", "backup", "plugin", "invite", "settings", "report", "appeal", "contact_notice", "media"].map((type) => `
+    <option value="${escapeHtml(type)}"${filters.targetType === type ? " selected" : ""}>${type ? formatAuditLabel(type) : "Any target"}</option>
+  `).join("");
+  const limitOptions = [25, 50, 80, 120, 200].map((limit) => `
+    <option value="${limit}"${Number(filters.limit || 80) === limit ? " selected" : ""}>${limit} events</option>
+  `).join("");
+  return `
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">Audit Log</div>
+    <div class="muted-copy">Searchable admin-only record of moderation, content, signup, section, plugin, and operations actions.</div>
+    <div class="settings-tool-grid audit-summary-grid">
+      <div class="settings-tool-card">
+        <div class="settings-tool-title">${fmtNum(summary.total || 0)}</div>
+        <div class="settings-tool-copy">Total audit events</div>
+      </div>
+      <div class="settings-tool-card">
+        <div class="settings-tool-title">${escapeHtml(formatDateTime(summary.latestAt))}</div>
+        <div class="settings-tool-copy">Most recent event</div>
+      </div>
+    </div>
+    <div class="settings-form-grid audit-filter-grid">
+      <div class="form-group">
+        <label class="form-label">Search</label>
+        <input class="form-input" id="auditSearch" value="${escapeHtml(filters.q || "")}" placeholder="Action, actor, target, reason">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Actor</label>
+        <input class="form-input" id="auditActor" value="${escapeHtml(filters.actor || "")}" placeholder="Username or user ID">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select class="form-input" id="auditCategory">${categoryOptions}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Target</label>
+        <select class="form-input" id="auditTargetType">${targetOptions}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">From</label>
+        <input class="form-input" id="auditFrom" type="date" value="${escapeHtml((filters.from || "").slice(0, 10))}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">To</label>
+        <input class="form-input" id="auditTo" type="date" value="${escapeHtml((filters.to || "").slice(0, 10))}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Limit</label>
+        <select class="form-input" id="auditLimit">${limitOptions}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Exact Action</label>
+        <input class="form-input" id="auditAction" value="${escapeHtml(filters.action || "")}" placeholder="backup_create">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="applyAuditFilters()">Apply Filters</button>
+      <button class="btn btn-outline" onclick="showAuditLog()">Reset</button>
+      <button class="btn btn-ghost" onclick="showAdminOpsModal()">Back to Operations</button>
+    </div>
+    <div class="audit-event-list">
+      ${(audit.items || []).length ? audit.items.map(renderAuditEvent).join("") : renderEmptyState("◇", "No audit events match those filters.", "Try broadening the search or date range.")}
+    </div>
+  `;
+}
+
+async function showAuditLog(params = {}) {
+  if (!Auth.isAdmin()) {
+    toast("Only admins and the owner can view the audit log.", "error");
+    return;
+  }
+  openModal(`
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">Audit Log</div>
+    <div class="muted-copy">Loading audit events...</div>
+  `, { size: "xl" });
+  try {
+    const data = await API.getAdminAudit(params);
+    openModal(renderAuditLogModal(data.audit || {}), { size: "xl" });
+  } catch (err) {
+    openModal(`
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">Audit Log</div>
+      ${modalError(err.message || "Could not load the audit log.")}
+      <div class="form-actions"><button class="btn btn-outline" onclick="showAdminOpsModal()">Back to Operations</button></div>
+    `, { size: "lg" });
+  }
+}
+
+function applyAuditFilters() {
+  showAuditLog({
+    q: document.getElementById("auditSearch")?.value?.trim() || "",
+    actor: document.getElementById("auditActor")?.value?.trim() || "",
+    category: document.getElementById("auditCategory")?.value || "",
+    targetType: document.getElementById("auditTargetType")?.value || "",
+    from: document.getElementById("auditFrom")?.value || "",
+    to: document.getElementById("auditTo")?.value || "",
+    limit: document.getElementById("auditLimit")?.value || "80",
+    action: document.getElementById("auditAction")?.value?.trim() || "",
+  });
+}
+
 async function showAdminOpsModal() {
   if (!Auth.isAdmin()) {
     toast("Only admins and the owner can open operations tools.", "error");
@@ -1276,44 +1964,287 @@ async function showAdminOpsModal() {
     <div class="muted-copy">Loading health and maintenance tools...</div>
   `, { size: "xl" });
   try {
-    const [healthData, logData] = await Promise.all([
-      API.getAdminHealth(),
-      API.getAdminLogs(),
-    ]);
+    const healthData = await API.getAdminHealth();
+    const logData = await API.getAdminLogs();
+    const trashData = await API.getAdminTrash(40);
     const health = healthData.health || {};
     const storage = health.storage || {};
     const runtime = health.runtime || {};
     const queues = health.queues || {};
+    const analytics = health.analytics || {};
+    const backups = storage.backups || [];
+    const trashItems = trashData.items || [];
+    const plugins = health.plugins || [];
+    const pluginStatus = health.pluginStatus || {};
+    const backupStatus = storage.backupStatus || {};
+    const mediaUsage = storage.mediaUsage || {};
+    const recovery = health.recovery || {};
+    const onboarding = health.onboarding || {};
+    const installChecks = health.installChecks || {};
+    const logSummary = health.logs || {};
+    const latestErrors = logSummary.latestErrors || [];
+    const databaseFiles = storage.databaseFiles || Object.entries(storage.databases || {}).map(([name, sizeLabel]) => ({ name, sizeLabel, exists: true }));
+    const mediaBuckets = mediaUsage.buckets || [];
+    const queueTotal = queues.totalOpen ?? ((queues.reports || 0) + (queues.appeals || 0) + (queues.contactNotices || 0) + (queues.registrations || 0));
+    const latestBackup = backupStatus.latest || backups[0] || null;
+    const restoreScript = recovery.restoreScript || {};
     openModal(`
       <button class="modal-close" onclick="closeModal()">✕</button>
       <div class="modal-title">Operations</div>
-      <div class="settings-tool-grid">
-        <div class="settings-tool-card">
-          <div class="settings-tool-title">Health</div>
-          <div class="detail-list">
-            <div><span>Started</span><strong>${escapeHtml(formatDateTime(health.startedAt))}</strong></div>
-            <div><span>Uptime</span><strong>${fmtNum(health.uptimeSeconds || 0)}s</strong></div>
-            <div><span>Uploads</span><strong>${fmtNum(storage.mediaAssets || 0)}</strong></div>
-            <div><span>Backups</span><strong>${fmtNum(storage.backupCount || 0)}</strong></div>
-          </div>
+      <div class="ops-hero">
+        <div>
+          <div class="ops-eyebrow">Production Health</div>
+          <div class="ops-hero-title">OmniForum runtime snapshot</div>
+          <div class="muted-copy">Database, media, queue, plugin, backup, and recovery readiness checks for the live instance.</div>
         </div>
-        <div class="settings-tool-card">
-          <div class="settings-tool-title">Queues</div>
-          <div class="detail-list">
-            <div><span>Reports</span><strong>${fmtNum(queues.reports || 0)}</strong></div>
-            <div><span>Appeals</span><strong>${fmtNum(queues.appeals || 0)}</strong></div>
-            <div><span>Contact</span><strong>${fmtNum(queues.contactNotices || 0)}</strong></div>
-            <div><span>Request Limit</span><strong>${escapeHtml(String(runtime.maxRequestBytes || 0))}</strong></div>
-          </div>
-        </div>
+        ${renderOpsBadge(recovery.status || backupStatus.status, recovery.message || backupStatus.statusLabel || "Health checked")}
+      </div>
+      <div class="ops-kpi-grid">
+        ${renderOpsKpi("Database Size", storage.databaseTotalSize || "0B", `${fmtNum(databaseFiles.length)} files tracked`, storage.databaseMissingCount ? "warning" : "healthy")}
+        ${renderOpsKpi("Media Usage", mediaUsage.totalSize || "0B", `${fmtNum(mediaUsage.totalFiles || storage.mediaAssets || 0)} files, ${fmtNum(mediaUsage.orphanedFiles || 0)} orphaned`, mediaUsage.orphanedFiles ? "warning" : "healthy")}
+        ${renderOpsKpi("Backup Status", backupStatus.statusLabel || "No status", latestBackup ? `Latest: ${formatDateTime(latestBackup.createdAt)}` : "Create the first archive", backupStatus.status)}
+        ${renderOpsKpi("Latest Errors", fmtNum(latestErrors.length || 0), latestErrors.length ? `Last: ${formatDateTime(latestErrors[0].time)}` : "No recent failures", latestErrors.length ? "warning" : "healthy")}
+        ${renderOpsKpi("Open Queues", fmtNum(queueTotal), queueTotal ? "Staff attention needed" : "All queues clear", queues.status || (queueTotal ? "attention" : "clear"))}
+        ${renderOpsKpi("Plugin Status", `${fmtNum(pluginStatus.enabled || 0)} / ${fmtNum(pluginStatus.total || plugins.length)} enabled`, pluginStatus.invalidCount ? `${fmtNum(pluginStatus.invalidCount)} invalid plugin folders` : "Manifests look good", pluginStatus.status)}
       </div>
       <div class="form-actions">
         <button class="btn btn-primary" onclick="createAdminBackup()">Create Backup</button>
+        <button class="btn btn-outline" onclick="showInstallWizard()">Setup Wizard</button>
+        <button class="btn btn-outline" onclick="showAdminExportTools()">Import / Export</button>
+        <button class="btn btn-outline" onclick="showStaffWorkflowTools()">Staff Workflows</button>
         <button class="btn btn-outline" onclick="runMediaCleanup()">Cleanup Orphan Media</button>
+        <button class="btn btn-outline" onclick="showSignupControls()">Signup Controls</button>
+        <button class="btn btn-outline" onclick="showAuditLog()">Audit Log</button>
+        <button class="btn btn-outline" onclick="showPluginManager()">Manage Plugins</button>
       </div>
-      <div class="page-section-title" style="margin-top:18px;">Database Sizes</div>
-      <div class="detail-list">
-        ${Object.entries(storage.databases || {}).map(([name, size]) => `<div><span>${escapeHtml(name)}</span><strong>${escapeHtml(size)}</strong></div>`).join("")}
+      <div class="settings-tool-grid ops-dashboard-grid">
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Database Storage</div>
+          <div class="settings-tool-copy">Total stored SQLite data across the dedicated data folder.</div>
+          <div class="detail-list">
+            ${renderOpsDetailRows([
+              ["Total", storage.databaseTotalSize || "0B"],
+              ["Files", fmtNum(databaseFiles.length)],
+              ["Missing", fmtNum(storage.databaseMissingCount || 0)],
+            ])}
+          </div>
+          <div class="ops-mini-list">
+            ${databaseFiles.map((item) => `
+              <div>
+                <span>${escapeHtml(item.name)}</span>
+                <strong>${escapeHtml(item.exists === false ? "Missing" : item.sizeLabel || "0B")}</strong>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Media Usage</div>
+          <div class="settings-tool-copy">Upload footprint by bucket, including cleanup candidates.</div>
+          <div class="detail-list">
+            ${renderOpsDetailRows([
+              ["Total Size", mediaUsage.totalSize || "0B"],
+              ["Files", fmtNum(mediaUsage.totalFiles || 0)],
+              ["Orphaned", `${fmtNum(mediaUsage.orphanedFiles || 0)} (${mediaUsage.orphanedSize || "0B"})`],
+              ["Per-user Quota", `${storage.mediaQuotaBytesLabel || "0B"} / ${fmtNum(storage.mediaQuotaFiles || 0)} files`],
+            ])}
+          </div>
+          <div class="ops-mini-list">
+            ${mediaBuckets.map((bucket) => `
+              <div>
+                <span>${escapeHtml(bucket.label || bucket.bucket)}</span>
+                <strong>${fmtNum(bucket.files || 0)} files / ${escapeHtml(bucket.sizeLabel || "0B")}</strong>
+              </div>
+            `).join("") || '<div><span>No media files</span><strong>0B</strong></div>'}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Backup Status</div>
+          <div class="settings-tool-copy">${escapeHtml(backupStatus.check?.message || backupStatus.statusLabel || "Backup status unavailable.")}</div>
+          <div class="detail-list">
+            ${renderOpsDetailRows([
+              ["Archives", fmtNum(backupStatus.count || storage.backupCount || 0)],
+              ["Total Size", backupStatus.totalSize || storage.backupTotalSize || "0B"],
+              ["Latest", latestBackup ? formatDateTime(latestBackup.createdAt) : "Not created"],
+              ["Latest Age", backupStatus.latestAgeLabel || "N/A"],
+              ["Rotation", `${fmtNum(backupStatus.rotationLimit || 0)} kept`],
+            ])}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Recovery Readiness</div>
+          <div class="settings-tool-copy">${escapeHtml(recovery.message || "Recovery readiness has not been checked yet.")}</div>
+          <div class="detail-list">
+            ${renderOpsDetailRows([
+              ["Backup Check", recovery.latestBackupCheck?.status ? `${recovery.latestBackupCheck.status} at ${formatDateTime(recovery.latestBackupCheck.checkedAt)}` : "Not checked"],
+              ["Restore Script", restoreScript.exists ? (restoreScript.executable ? "Ready" : "Not executable") : "Missing"],
+              ["Last Backup", recovery.lastBackupCreated?.time ? formatDateTime(recovery.lastBackupCreated.time) : "No backup log"],
+              ["Last Restore Guide", recovery.lastRestoreGuideCheck?.time ? formatDateTime(recovery.lastRestoreGuideCheck.time) : "Not opened"],
+            ])}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Queue Counts</div>
+          <div class="settings-tool-copy">Open staff work that may need triage.</div>
+          <div class="detail-list">
+            ${renderOpsDetailRows([
+              ["Reports", fmtNum(queues.reports || 0)],
+              ["Appeals", fmtNum(queues.appeals || 0)],
+              ["Contact", fmtNum(queues.contactNotices || 0)],
+              ["Registrations", fmtNum(queues.registrations || 0)],
+              ["Total Open", fmtNum(queueTotal)],
+            ])}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Plugin Status</div>
+          <div class="settings-tool-copy">Safe-loading summary for installed plugin manifests.</div>
+          <div class="detail-list">
+            ${renderOpsDetailRows([
+              ["Installed", fmtNum(pluginStatus.total || plugins.length)],
+              ["Enabled", fmtNum(pluginStatus.enabled || 0)],
+              ["Disabled", fmtNum(pluginStatus.disabled || 0)],
+              ["With Assets", fmtNum(pluginStatus.withClientAssets || 0)],
+              ["Invalid Folders", fmtNum(pluginStatus.invalidCount || 0)],
+            ])}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Runtime</div>
+          <div class="settings-tool-copy">Server configuration values visible to admins.</div>
+          <div class="detail-list">
+            ${renderOpsDetailRows([
+              ["Started", formatDateTime(health.startedAt)],
+              ["Uptime", `${fmtNum(health.uptimeSeconds || 0)}s`],
+              ["Public URL", runtime.publicUrl || "Not set"],
+              ["Request Limit", runtime.maxRequestSize || String(runtime.maxRequestBytes || 0)],
+              ["Secure Cookies", runtime.secureCookies ? "Enabled" : "Disabled"],
+              ["Discord Webhook", runtime.discordWebhookConfigured ? "Connected" : "Not configured"],
+              ["Signup Mode", runtime.registration?.mode || "Open"],
+              ["Media Processing", runtime.mediaProcessing?.enabled ? "Pillow enabled" : "Not installed"],
+            ])}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Latest Errors</div>
+          <div class="settings-tool-copy">Recent failed requests or runtime warnings from the server log.</div>
+          <div class="ops-log-list">
+            ${renderOpsLogEntries(latestErrors)}
+          </div>
+        </div>
+      </div>
+      <div class="page-section-title" style="margin-top:18px;">Launch Readiness</div>
+      <div class="settings-tool-grid ops-dashboard-grid">
+        ${renderOpsChecklist("Admin Onboarding Checklist", "First-run setup items for site structure, policies, registration, themes, and backups.", onboarding)}
+        ${renderOpsChecklist("Production Install Checker", "Hosting readiness checks for Docker, proxy files, upload folders, cookies, backup tooling, and media processing.", installChecks)}
+      </div>
+      <div class="page-section-title" style="margin-top:18px;">Recovery</div>
+      <div class="muted-copy" style="margin-bottom:12px;">Soft-deleted threads and replies can be restored here. Restore a thread before restoring any reply inside it.</div>
+      <div class="moderation-history-list">
+        ${trashItems.length ? trashItems.map((item) => `
+          <div class="moderation-history-card">
+            <div class="moderation-history-head">
+              <div>
+                <div class="moderation-history-title">${escapeHtml(item.title || (item.type === "thread" ? "Deleted thread" : "Deleted reply"))}</div>
+                <div class="moderation-history-meta">
+                  <span>${escapeHtml(item.type)}</span>
+                  <span>${escapeHtml(formatDateTime(item.deletedAt))}</span>
+                  ${item.section?.name ? `<span>${escapeHtml(item.section.name)}</span>` : ""}
+                  ${item.threadTitle ? `<span>${escapeHtml(item.threadTitle)}</span>` : ""}
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="restoreTrashItem(${serializeJsArg(item.type)}, ${JSON.stringify(item.id)})">Restore</button>
+            </div>
+            ${item.preview ? `<div class="moderation-history-copy">${escapeHtml(item.preview)}</div>` : ""}
+            <div class="tiny-copy">Deleted by ${escapeHtml(item.deletedBy?.username || "Unknown")} · ${escapeHtml(item.deleteReason || "No reason noted.")}</div>
+          </div>
+        `).join("") : renderEmptyState("🧺", "Trash is empty right now.")}
+      </div>
+      <div class="page-section-title" style="margin-top:18px;">Backup Archives</div>
+      <div class="moderation-history-list">
+        ${backups.length ? backups.map((item) => `
+          <div class="moderation-history-card">
+            <div class="moderation-history-head">
+              <div>
+                <div class="moderation-history-title">${escapeHtml(item.filename)}</div>
+                <div class="moderation-history-meta">
+                  <span>${escapeHtml(item.sizeLabel || "—")}</span>
+                  <span>${escapeHtml(formatDateTime(item.createdAt))}</span>
+                </div>
+              </div>
+              <div class="stack-actions">
+                <button class="btn btn-ghost btn-sm" onclick="showBackupGuide(${serializeJsArg(item.filename)})">Restore Guide</button>
+                <a class="btn btn-outline btn-sm" href="${escapeHtml(item.downloadUrl)}" target="_blank" rel="noreferrer">Download</a>
+              </div>
+            </div>
+          </div>
+        `).join("") : '<div class="centered-message settings-empty-block">No backups created yet.</div>'}
+      </div>
+      <div class="page-section-title" style="margin-top:18px;">Forum Analytics</div>
+      <div class="settings-tool-grid">
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">7-Day Activity</div>
+          <div class="detail-list">
+            ${renderOpsDetailRows([
+              ["Signups", fmtNum((analytics.registrations7d || []).reduce((sum, item) => sum + Number(item.count || 0), 0))],
+              ["Active Users", fmtNum((analytics.activeUsers7d || []).reduce((sum, item) => sum + Number(item.count || 0), 0))],
+              ["Threads", fmtNum((analytics.threads7d || []).reduce((sum, item) => sum + Number(item.count || 0), 0))],
+              ["Posts", fmtNum((analytics.posts7d || []).reduce((sum, item) => sum + Number(item.count || 0), 0))],
+              ["Searches", fmtNum((analytics.searches7d || []).reduce((sum, item) => sum + Number(item.count || 0), 0))],
+            ])}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Top Search Terms (30d)</div>
+          <div class="detail-list">
+            ${(analytics.topSearchTerms30d || []).length ? (analytics.topSearchTerms30d || []).map((item) => `<div><span>${escapeHtml(item.query)}</span><strong>${fmtNum(item.count)} searches</strong></div>`).join("") : "<div><span>No searches logged</span><strong>0</strong></div>"}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Storage Footprint</div>
+          <div class="detail-list">
+            ${renderOpsDetailRows([
+              ["Databases", analytics.storageFootprint?.databases || storage.databaseTotalSize || "0B"],
+              ["Media", analytics.storageFootprint?.media || mediaUsage.totalSize || "0B"],
+              ["Backups", backupStatus.totalSize || storage.backupTotalSize || "0B"],
+            ])}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Popular Tags</div>
+          <div class="detail-list">
+            ${(analytics.topTags || []).length ? (analytics.topTags || []).slice(0, 8).map((item) => `<div><span>#${escapeHtml(item.tag)}</span><strong>${fmtNum(item.count)}</strong></div>`).join("") : "<div><span>No tag data</span><strong>—</strong></div>"}
+          </div>
+        </div>
+      </div>
+      <div class="page-section-title" style="margin-top:18px;">Moderation Audit</div>
+      <div class="settings-tool-grid">
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Active Restrictions</div>
+          <div class="detail-list">
+            <div><span>Banned</span><strong>${fmtNum(analytics.activeRestrictions?.banned || 0)}</strong></div>
+            <div><span>Timed Out</span><strong>${fmtNum(analytics.activeRestrictions?.timedOut || 0)}</strong></div>
+            <div><span>Muted</span><strong>${fmtNum(analytics.activeRestrictions?.muted || 0)}</strong></div>
+            <div><span>Shadow Muted</span><strong>${fmtNum(analytics.activeRestrictions?.shadowMuted || 0)}</strong></div>
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Top Moderators (30d)</div>
+          <div class="detail-list">
+            ${(analytics.topModerators30d || []).length ? (analytics.topModerators30d || []).map((item) => `<div><span>${escapeHtml(item.username)}</span><strong>${fmtNum(item.count)}</strong></div>`).join("") : "<div><span>No staff actions</span><strong>0</strong></div>"}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Open Report Priorities</div>
+          <div class="detail-list">
+            ${(analytics.openReportPriorities || []).length ? (analytics.openReportPriorities || []).map((item) => `<div><span>${escapeHtml(item.priority)}</span><strong>${fmtNum(item.count)}</strong></div>`).join("") : "<div><span>No open reports</span><strong>0</strong></div>"}
+          </div>
+        </div>
+        <div class="settings-tool-card">
+          <div class="settings-tool-title">Top Sections</div>
+          <div class="detail-list">
+            ${(analytics.topSections || []).length ? (analytics.topSections || []).slice(0, 5).map((item) => `<div><span>${escapeHtml(item.name)}</span><strong>${fmtNum(item.posts || 0)} posts</strong></div>`).join("") : "<div><span>No section data</span><strong>—</strong></div>"}
+          </div>
+        </div>
       </div>
       <div class="page-section-title" style="margin-top:18px;">Recent Logs</div>
       <pre class="forum-code-block admin-log-block"><code>${escapeHtml((logData.logs || []).join("\n") || "No logs yet.")}</code></pre>
@@ -1340,6 +2271,44 @@ async function createAdminBackup() {
   }
 }
 
+async function showBackupGuide(filename) {
+  try {
+    const data = await API.getBackupGuide(filename);
+    const guide = data.guide || {};
+    const contents = guide.contents || {};
+    const restore = guide.restore || {};
+    openModal(`
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">Restore Guide</div>
+      <div class="muted-copy">Use this checklist before restoring ${escapeHtml(guide.filename || filename)} over live data.</div>
+      <div class="detail-list" style="margin-top:16px;">
+        <div><span>Archive</span><strong>${escapeHtml(guide.filename || filename)}</strong></div>
+        <div><span>Size</span><strong>${escapeHtml(guide.sizeLabel || "—")}</strong></div>
+        <div><span>Created</span><strong>${escapeHtml(formatDateTime(guide.createdAt))}</strong></div>
+        <div><span>Databases</span><strong>${fmtNum(contents.databaseCount || 0)}</strong></div>
+        <div><span>Uploads</span><strong>${fmtNum(contents.mediaCount || 0)}</strong></div>
+      </div>
+      ${contents.missingDatabases?.length ? `<div class="form-error visible" style="margin-top:14px;">Missing DB files: ${escapeHtml(contents.missingDatabases.join(", "))}</div>` : ""}
+      <div class="page-section-title" style="margin-top:18px;">Checklist</div>
+      <div class="detail-list">
+        ${(restore.checks || []).map((item) => `<div><span>Check</span><strong>${escapeHtml(item)}</strong></div>`).join("")}
+      </div>
+      <div class="page-section-title" style="margin-top:18px;">Steps</div>
+      <div class="stack-list">
+        ${(restore.steps || []).map((item, index) => `<div class="settings-empty-block"><strong>${index + 1}.</strong> ${escapeHtml(item)}</div>`).join("")}
+      </div>
+      <div class="page-section-title" style="margin-top:18px;">Restore Command</div>
+      <pre class="forum-code-block admin-log-block"><code>${escapeHtml(restore.command || "No command available.")}</code></pre>
+      <div class="form-actions">
+        <button class="btn btn-outline" onclick="copyTextValue(${serializeJsArg(restore.command || "")}, 'Restore command')">Copy Command</button>
+        ${guide.downloadUrl ? `<a class="btn btn-primary" href="${escapeHtml(guide.downloadUrl)}" target="_blank" rel="noreferrer">Download Archive</a>` : ""}
+      </div>
+    `, { size: "lg" });
+  } catch (err) {
+    toast(err.message || "Could not load that restore guide.", "error");
+  }
+}
+
 async function runMediaCleanup() {
   try {
     const data = await API.cleanupMedia();
@@ -1347,6 +2316,681 @@ async function runMediaCleanup() {
     await showAdminOpsModal();
   } catch (err) {
     toast(err.message || "Could not clean up media.", "error");
+  }
+}
+
+function siteThemeSelectOptions(selected = "midnight") {
+  return Object.entries(window.SITE_THEMES || {}).map(([id, theme]) => `
+    <option value="${escapeHtml(id)}"${id === selected ? " selected" : ""}>${escapeHtml(theme.label || id)}</option>
+  `).join("");
+}
+
+function footerLinkEditorRows(links = []) {
+  const rows = [...links];
+  while (rows.length < 4) rows.push({ label: "", url: "" });
+  return rows.slice(0, 6).map((link, index) => `
+    <div class="form-row search-filter-grid">
+      <div class="form-group">
+        <label class="form-label">Footer Label ${index + 1}</label>
+        <input class="form-input site-footer-label" maxlength="40" value="${escapeHtml(link.label || "")}" placeholder="Rules">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Footer URL ${index + 1}</label>
+        <input class="form-input site-footer-url" maxlength="240" value="${escapeHtml(link.url || "")}" placeholder="/pages/rules.html">
+      </div>
+    </div>
+  `).join("");
+}
+
+function featureToggleRows(toggles = {}) {
+  const labels = {
+    directMessages: "Direct messages",
+    uploads: "Image and GIF uploads",
+    polls: "Thread polls",
+    reactions: "Post reactions",
+    leaderboard: "Leaderboard",
+    publicMemberList: "Public member list",
+    staffInbox: "Staff inbox",
+  };
+  return Object.entries(labels).map(([key, label]) => `
+    <label class="checkbox-row settings-checkbox-row">
+      <input type="checkbox" class="site-feature-toggle" data-feature="${escapeHtml(key)}"${toggles[key] !== false ? " checked" : ""}>
+      <span>${escapeHtml(label)}</span>
+    </label>
+  `).join("");
+}
+
+function renderInstallWizard(data = {}) {
+  const site = data.site || activeSiteConfig;
+  const registration = data.registration || {};
+  const onboarding = data.onboarding || {};
+  const backupReady = (data.backups || []).length > 0;
+  return `
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">First-Run Setup Wizard</div>
+    <div class="muted-copy">Admin-only setup for branding, policy copy, registration mode, sections, themes, and the first backup.</div>
+    <div class="settings-tool-grid" style="margin-top:16px;">
+      <div class="settings-tool-card">
+        <div class="settings-tool-title">Launch Progress</div>
+        <div class="settings-tool-copy">${fmtNum(onboarding.complete || 0)} of ${fmtNum(onboarding.total || 0)} checklist items ready.</div>
+      </div>
+      <div class="settings-tool-card">
+        <div class="settings-tool-title">Registration</div>
+        <div class="settings-tool-copy">${escapeHtml(registration.mode || "Open")}</div>
+        <button class="btn btn-outline btn-sm" onclick="showSignupControls()">Edit Signup Controls</button>
+      </div>
+      <div class="settings-tool-card">
+        <div class="settings-tool-title">First Backup</div>
+        <div class="settings-tool-copy">${backupReady ? "At least one backup archive exists." : "Create one before public launch."}</div>
+        <button class="btn btn-outline btn-sm" onclick="createAdminBackup()">Create Backup</button>
+      </div>
+    </div>
+    <div class="form-error" id="siteSettingsError"></div>
+    <div class="page-section-title" style="margin-top:18px;">Branding & Homepage</div>
+    <div class="settings-form-grid">
+      <div class="form-group">
+        <label class="form-label">Site Name</label>
+        <input class="form-input" id="siteNameInput" maxlength="80" value="${escapeHtml(site.siteName || "")}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Default Theme</label>
+        <select class="form-input" id="siteDefaultTheme">${siteThemeSelectOptions(site.defaultTheme || "midnight")}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Logo Text</label>
+        <input class="form-input" id="siteLogoText" maxlength="80" value="${escapeHtml(site.logoText || "")}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Logo Mark</label>
+        <input class="form-input" id="siteLogoMark" maxlength="12" value="${escapeHtml(site.logoMark || "◈")}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hero Eyebrow</label>
+        <input class="form-input" id="siteHeroEyebrow" maxlength="80" value="${escapeHtml(site.heroEyebrow || "")}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Hero Title</label>
+        <input class="form-input" id="siteHeroTitle" maxlength="120" value="${escapeHtml(site.heroTitle || "")}">
+      </div>
+      <div class="form-group full">
+        <label class="form-label">Hero Subtitle</label>
+        <input class="form-input" id="siteHeroSubtitle" maxlength="240" value="${escapeHtml(site.heroSubtitle || "")}">
+      </div>
+      <div class="form-group full">
+        <label class="form-label">Homepage Copy</label>
+        <textarea class="form-textarea" id="siteHomepageCopy" maxlength="400">${escapeHtml(site.homepageCopy || "")}</textarea>
+      </div>
+    </div>
+    <div class="page-section-title" style="margin-top:18px;">Policy & Support Copy</div>
+    <div class="settings-form-grid">
+      <div class="form-group full">
+        <label class="form-label">Rules Intro</label>
+        <textarea class="form-textarea" id="siteRulesCopy" maxlength="1200">${escapeHtml(site.rulesCopy || "")}</textarea>
+      </div>
+      <div class="form-group full">
+        <label class="form-label">Privacy Intro</label>
+        <textarea class="form-textarea" id="sitePrivacyCopy" maxlength="1200">${escapeHtml(site.privacyCopy || "")}</textarea>
+      </div>
+      <div class="form-group full">
+        <label class="form-label">Contact Intro</label>
+        <textarea class="form-textarea" id="siteContactCopy" maxlength="1200">${escapeHtml(site.contactCopy || "")}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Support Discord</label>
+        <input class="form-input" id="siteSupportDiscord" maxlength="64" value="${escapeHtml(site.supportDiscord || "")}" placeholder="omniforum.staff">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Support URL</label>
+        <input class="form-input" id="siteSupportUrl" maxlength="240" value="${escapeHtml(site.supportUrl || "")}" placeholder="/pages/contact.html">
+      </div>
+      <div class="form-group full">
+        <label class="form-label">Upload Policy</label>
+        <textarea class="form-textarea" id="siteUploadPolicy" maxlength="500">${escapeHtml(site.uploadPolicy || "")}</textarea>
+      </div>
+    </div>
+    <div class="page-section-title" style="margin-top:18px;">SEO & Footer</div>
+    <div class="settings-form-grid">
+      <div class="form-group">
+        <label class="form-label">SEO Title</label>
+        <input class="form-input" id="siteSeoTitle" maxlength="120" value="${escapeHtml(site.seoTitle || "")}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Footer Copy</label>
+        <input class="form-input" id="siteFooterCopy" maxlength="160" value="${escapeHtml(site.footerCopy || "")}">
+      </div>
+      <div class="form-group full">
+        <label class="form-label">SEO Description</label>
+        <textarea class="form-textarea" id="siteSeoDescription" maxlength="220">${escapeHtml(site.seoDescription || "")}</textarea>
+      </div>
+    </div>
+    ${footerLinkEditorRows(site.footerLinks || [])}
+    <div class="page-section-title" style="margin-top:18px;">Feature Toggles</div>
+    <div class="checkbox-stack">${featureToggleRows(site.featureToggles || {})}</div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="saveAdminSiteSettings()">Save Setup</button>
+      <button class="btn btn-outline" onclick="showSectionManager()">Edit Sections</button>
+      <button class="btn btn-ghost" onclick="showAdminOpsModal()">Back to Operations</button>
+    </div>
+  `;
+}
+
+function collectSiteSettingsPayload() {
+  const featureToggles = {};
+  document.querySelectorAll(".site-feature-toggle").forEach((node) => {
+    featureToggles[node.dataset.feature] = Boolean(node.checked);
+  });
+  const labels = Array.from(document.querySelectorAll(".site-footer-label"));
+  const urls = Array.from(document.querySelectorAll(".site-footer-url"));
+  const footerLinks = labels.map((labelNode, index) => ({
+    label: labelNode.value.trim(),
+    url: urls[index]?.value?.trim() || "",
+  })).filter((link) => link.label && link.url);
+  return {
+    siteName: document.getElementById("siteNameInput")?.value?.trim() || "",
+    logoText: document.getElementById("siteLogoText")?.value?.trim() || "",
+    logoMark: document.getElementById("siteLogoMark")?.value?.trim() || "",
+    heroEyebrow: document.getElementById("siteHeroEyebrow")?.value?.trim() || "",
+    heroTitle: document.getElementById("siteHeroTitle")?.value?.trim() || "",
+    heroSubtitle: document.getElementById("siteHeroSubtitle")?.value?.trim() || "",
+    homepageCopy: document.getElementById("siteHomepageCopy")?.value || "",
+    rulesCopy: document.getElementById("siteRulesCopy")?.value || "",
+    privacyCopy: document.getElementById("sitePrivacyCopy")?.value || "",
+    contactCopy: document.getElementById("siteContactCopy")?.value || "",
+    supportDiscord: document.getElementById("siteSupportDiscord")?.value?.trim() || "",
+    supportUrl: document.getElementById("siteSupportUrl")?.value?.trim() || "",
+    uploadPolicy: document.getElementById("siteUploadPolicy")?.value || "",
+    seoTitle: document.getElementById("siteSeoTitle")?.value?.trim() || "",
+    seoDescription: document.getElementById("siteSeoDescription")?.value || "",
+    footerCopy: document.getElementById("siteFooterCopy")?.value?.trim() || "",
+    footerLinks,
+    defaultTheme: document.getElementById("siteDefaultTheme")?.value || "midnight",
+    featureToggles,
+  };
+}
+
+async function showInstallWizard() {
+  if (!Auth.isAdmin()) {
+    toast("Only admins and the owner can run first-run setup.", "error");
+    return;
+  }
+  openModal(`
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">First-Run Setup Wizard</div>
+    <div class="muted-copy">Loading site setup...</div>
+  `, { size: "xl" });
+  try {
+    const data = await API.getAdminSiteSettings();
+    openModal(renderInstallWizard(data), { size: "xl" });
+  } catch (err) {
+    openModal(`
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">First-Run Setup Wizard</div>
+      ${modalError(err.message || "Could not load site setup.")}
+    `, { size: "lg" });
+  }
+}
+
+async function saveAdminSiteSettings() {
+  const error = document.getElementById("siteSettingsError");
+  if (error) error.classList.remove("visible");
+  try {
+    const data = await API.updateAdminSiteSettings(collectSiteSettingsPayload());
+    applySiteConfig(data.site || {});
+    toast(data.message || "Site settings saved.", "success");
+    const fresh = await API.getAdminSiteSettings();
+    openModal(renderInstallWizard(fresh), { size: "xl" });
+  } catch (err) {
+    if (error) {
+      error.textContent = err.message || "Could not save site settings.";
+      error.classList.add("visible");
+    } else {
+      toast(err.message || "Could not save site settings.", "error");
+    }
+  }
+}
+
+function renderAdminExportTools() {
+  return `
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">Import / Export Tools</div>
+    <div class="muted-copy">Admin-readable exports for backups, audits, migrations, and safer restore planning. Import preview never writes live data.</div>
+    <div class="settings-form-grid" style="margin-top:16px;">
+      <div class="form-group">
+        <label class="form-label">Export Type</label>
+        <select class="form-input" id="adminExportType">
+          <option value="all">All Data JSON</option>
+          <option value="users">Users</option>
+          <option value="threads">Threads</option>
+          <option value="posts">Posts</option>
+          <option value="reports">Reports</option>
+          <option value="moderation">Moderation Logs</option>
+          <option value="settings">Settings</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Format</label>
+        <select class="form-input" id="adminExportFormat">
+          <option value="json">JSON</option>
+          <option value="csv">CSV</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="runAdminExport()">Download Export</button>
+      <button class="btn btn-ghost" onclick="showAdminOpsModal()">Back to Operations</button>
+    </div>
+    <div class="page-section-title" style="margin-top:18px;">Import Preview</div>
+    <div class="form-error" id="adminImportPreviewError"></div>
+    <textarea class="form-textarea" id="adminImportContent" placeholder="Paste an OmniForum JSON export here to preview counts before planning a restore."></textarea>
+    <div class="form-actions">
+      <button class="btn btn-outline" onclick="previewAdminImport()">Preview JSON</button>
+    </div>
+    <div id="adminImportPreviewResult"></div>
+  `;
+}
+
+async function showAdminExportTools() {
+  if (!Auth.isAdmin()) {
+    toast("Only admins and the owner can export site data.", "error");
+    return;
+  }
+  openModal(renderAdminExportTools(), { size: "lg" });
+}
+
+async function runAdminExport() {
+  try {
+    const data = await API.getAdminExport({
+      type: document.getElementById("adminExportType")?.value || "all",
+      format: document.getElementById("adminExportFormat")?.value || "json",
+    });
+    const exportData = data.export || {};
+    downloadTextFile(exportData.filename, exportData.content || "", exportData.contentType || "text/plain");
+    toast("Admin export downloaded.", "success");
+  } catch (err) {
+    toast(err.message || "Could not create that export.", "error");
+  }
+}
+
+async function previewAdminImport() {
+  const error = document.getElementById("adminImportPreviewError");
+  const result = document.getElementById("adminImportPreviewResult");
+  if (error) error.classList.remove("visible");
+  try {
+    const data = await API.previewAdminImport({
+      content: document.getElementById("adminImportContent")?.value || "",
+    });
+    const preview = data.preview || {};
+    if (result) {
+      result.innerHTML = `
+        <div class="settings-tool-card" style="margin-top:14px;">
+          <div class="settings-tool-title">Preview Ready</div>
+          <div class="settings-tool-copy">${escapeHtml(data.message || "No data was changed.")}</div>
+          <div class="detail-list">
+            ${Object.entries(preview.counts || {}).map(([key, value]) => `<div><span>${escapeHtml(key)}</span><strong>${fmtNum(value)}</strong></div>`).join("") || "<div><span>Items</span><strong>0</strong></div>"}
+          </div>
+          <div class="tiny-copy">${(preview.warnings || []).map(escapeHtml).join(" · ")}</div>
+        </div>
+      `;
+    }
+  } catch (err) {
+    if (error) {
+      error.textContent = err.message || "Could not preview that import.";
+      error.classList.add("visible");
+    }
+  }
+}
+
+async function showStaffWorkflowTools() {
+  if (!Auth.isStaff()) {
+    toast("Only moderators and admins can manage workflow tools.", "error");
+    return;
+  }
+  openModal(`
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">Staff Workflow Tools</div>
+    <div class="muted-copy">Loading saved moderation macros...</div>
+  `, { size: "lg" });
+  try {
+    const data = await API.getReportMacros();
+    const macros = data.macros || [];
+    openModal(`
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">Staff Workflow Tools</div>
+      <div class="muted-copy">Saved macros are available inside the report queue for consistent triage notes, escalations, and resolution language.</div>
+      <div class="form-error" id="macroEditorError"></div>
+      <div class="settings-form-grid" style="margin-top:16px;">
+        <div class="form-group">
+          <label class="form-label">Macro Title</label>
+          <input class="form-input" id="macroTitle" maxlength="80" placeholder="Asked for more context">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <input class="form-input" id="macroCategory" maxlength="40" placeholder="triage">
+        </div>
+        <div class="form-group full">
+          <label class="form-label">Macro Body</label>
+          <textarea class="form-textarea" id="macroBody" maxlength="1200" placeholder="Internal note text staff can apply to a report."></textarea>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="createStaffMacro()">Save Macro</button>
+        <button class="btn btn-ghost" onclick="showAdminOpsModal()">Back to Operations</button>
+      </div>
+      <div class="moderation-history-list" style="margin-top:16px;">
+        ${macros.length ? macros.map((macro) => `
+          <div class="moderation-history-card">
+            <div class="moderation-history-head">
+              <div>
+                <div class="moderation-history-title">${escapeHtml(macro.title)}</div>
+                <div class="moderation-history-meta">
+                  <span>${escapeHtml(macro.category || "general")}</span>
+                  <span>${macro.enabled ? "Enabled" : "Disabled"}</span>
+                </div>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="toggleStaffMacro(${JSON.stringify(macro.id)}, ${macro.enabled ? "false" : "true"})">${macro.enabled ? "Disable" : "Enable"}</button>
+            </div>
+            <div class="moderation-history-copy">${escapeHtml(macro.body)}</div>
+          </div>
+        `).join("") : renderEmptyState("◇", "No saved macros yet.")}
+      </div>
+    `, { size: "lg" });
+  } catch (err) {
+    toast(err.message || "Could not load workflow tools.", "error");
+  }
+}
+
+async function createStaffMacro() {
+  const error = document.getElementById("macroEditorError");
+  if (error) error.classList.remove("visible");
+  try {
+    await API.createReportMacro({
+      title: document.getElementById("macroTitle")?.value?.trim() || "",
+      category: document.getElementById("macroCategory")?.value?.trim() || "",
+      body: document.getElementById("macroBody")?.value || "",
+      enabled: true,
+    });
+    toast("Macro saved.", "success");
+    await showStaffWorkflowTools();
+  } catch (err) {
+    if (error) {
+      error.textContent = err.message || "Could not save that macro.";
+      error.classList.add("visible");
+    }
+  }
+}
+
+async function toggleStaffMacro(macroId, enabled) {
+  try {
+    await API.updateReportMacro(macroId, { enabled });
+    toast("Macro updated.", "success");
+    await showStaffWorkflowTools();
+  } catch (err) {
+    toast(err.message || "Could not update that macro.", "error");
+  }
+}
+
+function renderSignupControls(controls = {}) {
+  const settings = controls.settings || {};
+  const pending = controls.pending || [];
+  const invites = controls.invites || [];
+  const pendingBody = pending.length
+    ? pending.map((item) => `
+      <div class="moderation-history-card">
+        <div class="moderation-history-head">
+          <div>
+            <div class="moderation-history-title">${escapeHtml(item.username)}</div>
+            <div class="moderation-history-meta">
+              <span>${escapeHtml(formatDateTime(item.createdAt))}</span>
+              ${item.inviteCodeUsed ? `<span>Invite: ${escapeHtml(item.inviteCodeUsed)}</span>` : "<span>No invite</span>"}
+              ${item.registrationIp ? `<span>IP: ${escapeHtml(item.registrationIp)}</span>` : ""}
+            </div>
+          </div>
+          ${roleBadge(item.role || "new")}
+        </div>
+        <textarea class="form-textarea notice-note" id="registrationNote-${item.id}" maxlength="500" placeholder="Optional internal review note"></textarea>
+        <div class="form-actions">
+          <button class="btn btn-primary btn-sm" onclick="reviewSignup(${JSON.stringify(item.id)}, 'approve')">Approve</button>
+          <button class="btn btn-danger btn-sm" onclick="reviewSignup(${JSON.stringify(item.id)}, 'reject')">Reject</button>
+        </div>
+      </div>
+    `).join("")
+    : renderEmptyState("✓", "No registrations are waiting for approval.");
+  const inviteBody = invites.length
+    ? invites.map((invite) => `
+      <div class="moderation-history-card">
+        <div class="moderation-history-head">
+          <div>
+            <div class="moderation-history-title">${escapeHtml(invite.code)}</div>
+            <div class="moderation-history-meta">
+              <span>${invite.enabled ? "Enabled" : "Disabled"}</span>
+              <span>${fmtNum(invite.uses || 0)} / ${fmtNum(invite.maxUses || 0)} used</span>
+              ${invite.expiresAt ? `<span>${invite.expired ? "Expired" : "Expires"} ${escapeHtml(formatDateTime(invite.expiresAt))}</span>` : "<span>No expiry</span>"}
+            </div>
+          </div>
+          <div class="stack-actions">
+            <button class="btn btn-ghost btn-sm" onclick="copyTextValue(${serializeJsArg(invite.code)}, 'Invite code')">Copy</button>
+            <button class="btn ${invite.enabled ? "btn-outline" : "btn-primary"} btn-sm" onclick="toggleInvite(${JSON.stringify(invite.id)}, ${invite.enabled ? "false" : "true"})">${invite.enabled ? "Disable" : "Enable"}</button>
+          </div>
+        </div>
+        ${invite.note ? `<div class="moderation-history-copy">${escapeHtml(invite.note)}</div>` : ""}
+        <div class="tiny-copy">Remaining uses: ${fmtNum(invite.remainingUses || 0)}${invite.createdBy?.username ? ` · Created by ${escapeHtml(invite.createdBy.username)}` : ""}</div>
+      </div>
+    `).join("")
+    : renderEmptyState("◇", "No invite codes yet.", "Create one when you want invite-only registration.");
+
+  return `
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">Signup Controls</div>
+    <div class="muted-copy">Admin-only registration controls for invite-only mode, approval review, throttling, and blocked username patterns.</div>
+    <div class="settings-tool-grid" style="margin-top:16px;">
+      <div class="settings-tool-card">
+        <div class="settings-tool-title">Mode</div>
+        <div class="detail-list">
+          <div><span>Current</span><strong>${escapeHtml(settings.mode || "Open")}</strong></div>
+          <div><span>Pending</span><strong>${fmtNum(controls.pendingCount || 0)}</strong></div>
+        </div>
+      </div>
+      <div class="settings-tool-card">
+        <div class="settings-tool-title">Abuse Controls</div>
+        <div class="detail-list">
+          <div><span>Invite Gate</span><strong>${settings.inviteRequired ? "On" : "Off"}</strong></div>
+          <div><span>Approval Queue</span><strong>${settings.approvalRequired ? "On" : "Off"}</strong></div>
+          <div><span>Captcha</span><strong>${settings.captchaSupported ? "Enabled" : "Not configured"}</strong></div>
+        </div>
+      </div>
+    </div>
+    <div class="form-error" id="signupControlsError"></div>
+    <div class="page-section-title" style="margin-top:18px;">Registration Settings</div>
+    <label class="checkbox-row settings-checkbox-row"><input type="checkbox" id="signupPublic"${settings.publicRegistrationEnabled ? " checked" : ""}> <span>Allow public registration without closing the signup form entirely</span></label>
+    <label class="checkbox-row settings-checkbox-row"><input type="checkbox" id="signupInviteRequired"${settings.inviteRequired ? " checked" : ""}> <span>Require a valid invite code</span></label>
+    <label class="checkbox-row settings-checkbox-row"><input type="checkbox" id="signupApprovalRequired"${settings.approvalRequired ? " checked" : ""}> <span>Require admin approval before new users can log in</span></label>
+    <div class="form-group" style="margin-top:14px;">
+      <label class="form-label">Blocked Username Patterns</label>
+      <textarea class="form-textarea" id="signupBlockedPatterns" maxlength="4000" placeholder="admin*\n*support*\nmoderator">${escapeHtml(settings.blockedUsernamePatterns || "")}</textarea>
+      <div class="form-hint">One pattern per line. Use wildcards like <code>admin*</code>, or plain words to block usernames containing that word.</div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="saveSignupSettings()">Save Signup Settings</button>
+      <button class="btn btn-ghost" onclick="showAdminOpsModal()">Back to Operations</button>
+    </div>
+    <div class="page-section-title" style="margin-top:18px;">Create Invite</div>
+    <div class="settings-form-grid">
+      <div class="form-group">
+        <label class="form-label">Custom Code</label>
+        <input class="form-input" id="inviteCode" maxlength="40" placeholder="Leave blank to generate">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Max Uses</label>
+        <input class="form-input" id="inviteMaxUses" type="number" min="1" max="500" value="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Expires In Days</label>
+        <input class="form-input" id="inviteExpiresInDays" type="number" min="1" max="365" placeholder="Optional">
+      </div>
+      <div class="form-group full">
+        <label class="form-label">Staff Note</label>
+        <input class="form-input" id="inviteNote" maxlength="160" placeholder="Who this invite is for">
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-outline" onclick="createSignupInvite()">Create Invite Code</button>
+    </div>
+    <div class="page-section-title" style="margin-top:18px;">Approval Queue</div>
+    <div class="moderation-history-list">${pendingBody}</div>
+    <div class="page-section-title" style="margin-top:18px;">Invite Codes</div>
+    <div class="moderation-history-list">${inviteBody}</div>
+    <div class="tiny-copy" style="margin-top:14px;">${escapeHtml(settings.captchaNote || "")}</div>
+  `;
+}
+
+async function showSignupControls() {
+  if (!Auth.isAdmin()) {
+    toast("Only admins and the owner can manage signup controls.", "error");
+    return;
+  }
+  openModal(`
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">Signup Controls</div>
+    <div class="muted-copy">Loading registration controls...</div>
+  `, { size: "xl" });
+  try {
+    const data = await API.getAdminRegistration();
+    openModal(renderSignupControls(data.controls || {}), { size: "xl" });
+  } catch (err) {
+    openModal(`
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">Signup Controls</div>
+      ${modalError(err.message || "Could not load signup controls.")}
+    `, { size: "lg" });
+  }
+}
+
+async function saveSignupSettings() {
+  const error = document.getElementById("signupControlsError");
+  if (error) error.classList.remove("visible");
+  try {
+    const data = await API.updateRegistrationSettings({
+      publicRegistrationEnabled: Boolean(document.getElementById("signupPublic")?.checked),
+      inviteRequired: Boolean(document.getElementById("signupInviteRequired")?.checked),
+      approvalRequired: Boolean(document.getElementById("signupApprovalRequired")?.checked),
+      blockedUsernamePatterns: document.getElementById("signupBlockedPatterns")?.value || "",
+    });
+    toast(data.message || "Signup settings saved.", "success");
+    openModal(renderSignupControls(data.controls || {}), { size: "xl" });
+  } catch (err) {
+    if (error) {
+      error.textContent = err.message || "Could not save signup settings.";
+      error.classList.add("visible");
+    } else {
+      toast(err.message || "Could not save signup settings.", "error");
+    }
+  }
+}
+
+async function createSignupInvite() {
+  try {
+    const data = await API.createInvite({
+      code: document.getElementById("inviteCode")?.value?.trim() || "",
+      maxUses: Number(document.getElementById("inviteMaxUses")?.value || 1),
+      expiresInDays: document.getElementById("inviteExpiresInDays")?.value || "",
+      note: document.getElementById("inviteNote")?.value?.trim() || "",
+    });
+    toast(data.message || "Invite created.", "success");
+    openModal(renderSignupControls(data.controls || {}), { size: "xl" });
+  } catch (err) {
+    toast(err.message || "Could not create invite.", "error");
+  }
+}
+
+async function toggleInvite(inviteId, enabled) {
+  try {
+    const data = await API.updateInvite(inviteId, { enabled });
+    toast(data.message || "Invite updated.", "success");
+    openModal(renderSignupControls(data.controls || {}), { size: "xl" });
+  } catch (err) {
+    toast(err.message || "Could not update invite.", "error");
+  }
+}
+
+async function reviewSignup(userId, action) {
+  const note = document.getElementById(`registrationNote-${userId}`)?.value || "";
+  try {
+    const data = await API.reviewRegistration(userId, { action, note });
+    toast(data.message || "Registration reviewed.", "success");
+    openModal(renderSignupControls(data.controls || {}), { size: "xl" });
+  } catch (err) {
+    toast(err.message || "Could not review that registration.", "error");
+  }
+}
+
+async function showPluginManager() {
+  if (!Auth.isAdmin()) {
+    toast("Only admins and the owner can manage plugins.", "error");
+    return;
+  }
+  openModal(`
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">Plugin Manager</div>
+    <div class="muted-copy">Loading installed plugins...</div>
+  `, { size: "lg" });
+  try {
+    const data = await API.getPlugins({ includeAll: 1 });
+    const plugins = data.plugins || [];
+    openModal(`
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">Plugin Manager</div>
+      <div class="muted-copy">Only enabled plugins with manifest-declared client assets can load into OmniForum. CSS/JS changes may need a refresh to fully unload.</div>
+      <div class="moderation-history-list" style="margin-top:18px;">
+        ${plugins.length ? plugins.map((plugin) => `
+          <div class="moderation-history-card">
+            <div class="moderation-history-head">
+              <div>
+                <div class="moderation-history-title">${escapeHtml(plugin.name)}</div>
+                <div class="moderation-history-meta">
+                  <span>${escapeHtml(plugin.id)}</span>
+                  <span>v${escapeHtml(plugin.version || "0.0.0")}</span>
+                  <span>${plugin.enabled ? "Enabled" : "Disabled"}</span>
+                </div>
+              </div>
+              <button class="btn ${plugin.enabled ? "btn-outline" : "btn-primary"} btn-sm" onclick="togglePluginState(${serializeJsArg(plugin.id)}, ${plugin.enabled ? "false" : "true"})">
+                ${plugin.enabled ? "Disable" : "Enable"}
+              </button>
+            </div>
+            ${plugin.description ? `<div class="moderation-history-copy">${escapeHtml(plugin.description)}</div>` : ""}
+            <div class="detail-list" style="margin-top:10px;">
+              <div><span>Directory</span><strong>${escapeHtml(plugin.directory)}</strong></div>
+              <div><span>Assets</span><strong>${fmtNum(plugin.assetCounts?.styles || 0)} CSS · ${fmtNum(plugin.assetCounts?.scripts || 0)} JS · ${fmtNum(plugin.assetCounts?.assets || 0)} files</strong></div>
+              <div><span>Loading Rules</span><strong>Enabled + manifest-declared only</strong></div>
+            </div>
+          </div>
+        `).join("") : renderEmptyState("🧩", "No plugins are installed yet.", "Create plugin folders under /plugins with a plugin.json manifest.")}
+      </div>
+    `, { size: "lg" });
+  } catch (err) {
+    toast(err.message || "Could not load the plugin manager.", "error");
+  }
+}
+
+async function togglePluginState(pluginId, enabled) {
+  try {
+    const data = await API.updatePlugin(pluginId, { enabled });
+    if (enabled) {
+      await loadEnabledPlugins();
+    }
+    toast(data.message || "Plugin updated.", "success");
+    await showPluginManager();
+  } catch (err) {
+    toast(err.message || "Could not update that plugin.", "error");
+  }
+}
+
+async function restoreTrashItem(type, id) {
+  try {
+    const data = await API.restoreAdminTrash({ type, id });
+    toast(data.message || "Item restored.", "success");
+    await showAdminOpsModal();
+  } catch (err) {
+    toast(err.message || "Could not restore that item.", "error");
   }
 }
 
@@ -2034,6 +3678,7 @@ function renderModerationStatus(moderation) {
         <div class="moderation-status-copy">A temporary recovery password is active for this account. The user must choose a new password after their next login.</div>
         <div class="tiny-copy">
           ${moderation.passwordResetSetAt ? `Issued ${escapeHtml(formatDateTime(moderation.passwordResetSetAt))}` : ""}
+          ${moderation.passwordResetExpiresAt ? ` · expires ${escapeHtml(formatDateTime(moderation.passwordResetExpiresAt))}` : ""}
           ${moderation.passwordResetBy?.username ? ` by ${escapeHtml(moderation.passwordResetBy.username)}` : ""}
         </div>
       </div>
@@ -2241,6 +3886,7 @@ function updateModerationActionForm() {
   const xpGroup = document.getElementById("moderationXpGroup");
   const tempPasswordGroup = document.getElementById("moderationTempPasswordGroup");
   const tempPasswordConfirmGroup = document.getElementById("moderationTempPasswordConfirmGroup");
+  const tempPasswordExpiryGroup = document.getElementById("moderationTempPasswordExpiryGroup");
   const button = document.getElementById("moderationSubmitButton");
 
   if (hint) hint.textContent = config.hint;
@@ -2250,6 +3896,7 @@ function updateModerationActionForm() {
   if (xpGroup) xpGroup.style.display = config.showXp ? "" : "none";
   if (tempPasswordGroup) tempPasswordGroup.style.display = config.showTempPassword ? "" : "none";
   if (tempPasswordConfirmGroup) tempPasswordConfirmGroup.style.display = config.showTempPassword ? "" : "none";
+  if (tempPasswordExpiryGroup) tempPasswordExpiryGroup.style.display = config.showTempPassword ? "" : "none";
   if (button) button.textContent = config.button;
 }
 
@@ -2263,6 +3910,7 @@ async function saveModerationAction(userId) {
   const deltaXp = document.getElementById("moderationXpDelta")?.value?.trim() || "";
   const tempPassword = document.getElementById("moderationTempPassword")?.value || "";
   const tempPasswordConfirm = document.getElementById("moderationTempPasswordConfirm")?.value || "";
+  const tempPasswordExpires = document.getElementById("moderationTempPasswordExpires")?.value || "48";
   const payload = { action };
 
   if (action === "note") {
@@ -2276,6 +3924,7 @@ async function saveModerationAction(userId) {
       return;
     }
     payload.tempPassword = tempPassword;
+    payload.expiresInHours = Number(tempPasswordExpires || 48);
     if (reason) payload.note = reason;
   } else if (reason) {
     payload.reason = reason;
@@ -2363,6 +4012,7 @@ async function showProfile(userId) {
         ${user.profileBadge ? `<div class="profile-custom-badge"${user.profileAccent ? ` style="background:${escapeHtml(user.profileAccent)}1a;color:${escapeHtml(user.profileAccent)}"` : ""}>${escapeHtml(user.profileBadge)}</div>` : ""}
         <div style="margin:6px 0">${roleBadge(user.role)}</div>
         <div class="profile-joined">Member since ${escapeHtml(formatDate(user.joined))}${user.online ? ' · <span class="online-dot"></span> Online' : ""}</div>
+        ${user.statusText ? `<div class="tiny-copy" style="margin-top:8px;">${escapeHtml(user.statusText)}</div>` : ""}
       </div>
       <div class="profile-bio">${user.bio ? `"${escapeHtml(user.bio)}"` : "No bio yet."}</div>
       ${user.signature ? `<div class="profile-signature">${renderUserContent(user.signature)}</div>` : ""}
@@ -2446,6 +4096,16 @@ async function showProfile(userId) {
             <label class="form-label">Confirm Temporary Password</label>
             <input class="form-input" id="moderationTempPasswordConfirm" type="password" minlength="8" autocomplete="new-password" placeholder="Confirm temporary password">
           </div>
+          <div class="form-group" id="moderationTempPasswordExpiryGroup">
+            <label class="form-label">Temporary Password Expires</label>
+            <select class="form-input" id="moderationTempPasswordExpires">
+              <option value="24">24 hours</option>
+              <option value="48" selected>48 hours</option>
+              <option value="72">72 hours</option>
+              <option value="168">7 days</option>
+            </select>
+            <div class="form-hint">Expired temporary passwords cannot be used to log in.</div>
+          </div>
           <div class="form-group">
             <label class="form-label" id="moderationReasonLabel">Reason</label>
             <textarea class="form-textarea moderation-textarea" id="moderationReason"></textarea>
@@ -2465,6 +4125,8 @@ async function showProfile(userId) {
       <div class="form-actions">
         ${viewer && viewer.id !== user.id ? `<button class="btn btn-ghost" onclick="showReportModal('user', ${JSON.stringify(user.id)}, ${serializeJsArg(user.username)})">Report</button>` : ""}
         ${user.canMessage ? `<button class="btn btn-outline" onclick="showComposeMessageModal(${JSON.stringify(user.id)}, ${serializeJsArg(user.username)})">Message</button>` : ""}
+        ${viewer && viewer.id !== user.id ? `<button class="btn btn-ghost" onclick="saveUserRelationship(${JSON.stringify(user.id)}, { ignoreContent: ${user.relationship?.ignoreContent ? "false" : "true"}, blockDm: ${user.relationship?.blockDm ? "true" : "false"} })">${user.relationship?.ignoreContent ? "Unignore" : "Ignore"} Content</button>` : ""}
+        ${viewer && viewer.id !== user.id ? `<button class="btn btn-ghost" onclick="saveUserRelationship(${JSON.stringify(user.id)}, { ignoreContent: ${user.relationship?.ignoreContent ? "true" : "false"}, blockDm: ${user.relationship?.blockDm ? "false" : "true"} })">${user.relationship?.blockDm ? "Unblock" : "Block"} DMs</button>` : ""}
         ${viewer?.id === user.id && moderation && (moderation.isBanned || moderation.isTimedOut || moderation.isMuted) ? '<button class="btn btn-outline" onclick="showAppealsQueue(\'all\')">Appeals</button>' : ""}
         ${viewer?.id === user.id ? '<button class="btn btn-ghost" onclick="goToSettingsPage()">Settings</button>' : ""}
         ${canManageRole ? `<button class="btn btn-primary" onclick="saveUserRole(${JSON.stringify(user.id)})">Save Role</button>` : ""}
@@ -2546,6 +4208,22 @@ async function saveUserRole(userId) {
   }
 }
 
+async function saveUserRelationship(userId, payload) {
+  try {
+    const data = await API.updateUserRelationship(userId, payload);
+    if (data.currentUser) {
+      Auth.setCurrentUser(data.currentUser);
+    }
+    toast(data.message || "Member controls updated.", "success");
+    await showProfile(userId);
+    if (typeof window.refreshCurrentPage === "function") {
+      await window.refreshCurrentPage();
+    }
+  } catch (err) {
+    toast(err.message || "Could not update member controls.", "error");
+  }
+}
+
 window.toast = toast;
 window.copyTextValue = copyTextValue;
 window.openModal = openModal;
@@ -2563,10 +4241,15 @@ window.renderTopMembers = renderTopMembers;
 window.renderHeroStats = renderHeroStats;
 window.renderTicker = renderTicker;
 window.renderFooterYear = renderFooterYear;
+window.applySiteConfig = applySiteConfig;
+window.loadSiteConfig = loadSiteConfig;
+window.getSiteDefaultTheme = getSiteDefaultTheme;
 window.handleAuthStateChanged = handleAuthStateChanged;
 window.showSearchModal = showSearchModal;
 window.scheduleGlobalSearch = scheduleGlobalSearch;
 window.showNotifications = showNotifications;
+window.showNotificationStatus = showNotificationStatus;
+window.showNotificationKind = showNotificationKind;
 window.markNotificationAsRead = markNotificationAsRead;
 window.markAllNotificationsRead = markAllNotificationsRead;
 window.openNotificationTarget = openNotificationTarget;
@@ -2587,6 +4270,8 @@ window.sendDirectMessage = sendDirectMessage;
 window.replyToDirectMessage = replyToDirectMessage;
 window.showReportsQueue = showReportsQueue;
 window.saveReportQueueItem = saveReportQueueItem;
+window.applyReportMacro = applyReportMacro;
+window.addReportInternalNote = addReportInternalNote;
 window.bulkUpdateReports = bulkUpdateReports;
 window.showAppealsQueue = showAppealsQueue;
 window.showAppealComposer = showAppealComposer;
@@ -2594,7 +4279,26 @@ window.submitAppeal = submitAppeal;
 window.saveAppealQueueItem = saveAppealQueueItem;
 window.showAdminOpsModal = showAdminOpsModal;
 window.createAdminBackup = createAdminBackup;
+window.showBackupGuide = showBackupGuide;
 window.runMediaCleanup = runMediaCleanup;
+window.showInstallWizard = showInstallWizard;
+window.saveAdminSiteSettings = saveAdminSiteSettings;
+window.showAdminExportTools = showAdminExportTools;
+window.runAdminExport = runAdminExport;
+window.previewAdminImport = previewAdminImport;
+window.showStaffWorkflowTools = showStaffWorkflowTools;
+window.createStaffMacro = createStaffMacro;
+window.toggleStaffMacro = toggleStaffMacro;
+window.showAuditLog = showAuditLog;
+window.applyAuditFilters = applyAuditFilters;
+window.showSignupControls = showSignupControls;
+window.saveSignupSettings = saveSignupSettings;
+window.createSignupInvite = createSignupInvite;
+window.toggleInvite = toggleInvite;
+window.reviewSignup = reviewSignup;
+window.showPluginManager = showPluginManager;
+window.togglePluginState = togglePluginState;
+window.restoreTrashItem = restoreTrashItem;
 window.showReportModal = showReportModal;
 window.submitReport = submitReport;
 window.showStaffInbox = showStaffInbox;
@@ -2606,3 +4310,4 @@ window.showProfile = showProfile;
 window.showEditProfileModal = showEditProfileModal;
 window.saveProfile = saveProfile;
 window.saveUserRole = saveUserRole;
+window.saveUserRelationship = saveUserRelationship;

@@ -613,16 +613,19 @@ async function readSingleImageUpload(files, options = {}) {
   return uploads[0] || null;
 }
 
-function renderInlineMedia(media = []) {
+function renderInlineMedia(media = [], options = {}) {
   const items = Array.isArray(media) ? media.filter((item) => item?.url) : [];
   if (!items.length) return "";
+  const sensitive = Boolean(options.sensitive);
+  const blurMedia = Boolean(options.blurMedia);
   return `
-    <div class="inline-media-grid${items.length === 1 ? " single" : ""}">
+    <div class="inline-media-grid${items.length === 1 ? " single" : ""}${sensitive ? " sensitive" : ""}${blurMedia ? " sensitive-blur" : ""}">
       ${items.map((item) => `
-        <figure class="inline-media-card-wrap">
+        <figure class="inline-media-card-wrap${sensitive && blurMedia ? " sensitive-media-card blurred" : ""}">
           <a class="inline-media-card" href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">
-            <img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.alt || "Forum image")}" loading="lazy">
+            <img src="${escapeHtml(item.thumbnailUrl || item.url)}" alt="${escapeHtml(item.alt || "Forum image")}" loading="lazy">
           </a>
+          ${sensitive && blurMedia ? '<button class="sensitive-media-toggle" type="button" onclick="toggleSensitiveMedia(event)">Reveal media</button>' : ""}
           ${item.alt ? `<figcaption class="inline-media-caption">${escapeHtml(item.alt)}</figcaption>` : ""}
         </figure>
       `).join("")}
@@ -698,9 +701,9 @@ function renderMarkupBlocks(text) {
   }).join("");
 }
 
-function renderUserContent(text, media = []) {
+function renderUserContent(text, media = [], options = {}) {
   const copy = renderMarkupBlocks(text);
-  const mediaMarkup = renderInlineMedia(media);
+  const mediaMarkup = renderInlineMedia(media, options);
   if (!copy && !mediaMarkup) {
     return "<p></p>";
   }
@@ -731,7 +734,76 @@ function bindDropTarget(dropTarget, fileInput, onFiles) {
     dropTarget.classList.remove("drag-active");
   }));
   dropTarget.addEventListener("drop", onDrop);
-  return () => dropTarget.removeEventListener("drop", onDrop);
+  const onKeydown = (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    fileInput.click();
+  };
+  dropTarget.addEventListener("keydown", onKeydown);
+  return () => {
+    dropTarget.removeEventListener("drop", onDrop);
+    dropTarget.removeEventListener("keydown", onKeydown);
+  };
+}
+
+async function readPastedImageUploads(items, options = {}) {
+  const files = Array.from(items || [])
+    .map((item) => item?.getAsFile?.())
+    .filter((file) => file && isSupportedImageFile(file));
+  if (!files.length) return [];
+  return readImageUploads(files, options);
+}
+
+function bindPasteImageTarget(target, onUploads, options = {}) {
+  if (!target || typeof onUploads !== "function") return () => {};
+  const handler = async (event) => {
+    try {
+      const uploads = await readPastedImageUploads(event.clipboardData?.items, options);
+      if (!uploads.length) return;
+      event.preventDefault();
+      await onUploads(uploads, { fromPaste: true });
+    } catch (err) {
+      if (typeof window.toast === "function") {
+        window.toast(err.message || "Could not add the pasted image.", "error");
+      }
+    }
+  };
+  target.addEventListener("paste", handler);
+  return () => target.removeEventListener("paste", handler);
+}
+
+function toggleSensitiveMedia(event) {
+  const card = event?.target?.closest(".sensitive-media-card");
+  if (!card) return;
+  card.classList.toggle("blurred");
+  const toggle = card.querySelector(".sensitive-media-toggle");
+  if (toggle) {
+    toggle.textContent = card.classList.contains("blurred") ? "Reveal media" : "Hide media";
+  }
+}
+
+function downloadJsonFile(filename, payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename || "omniforum-export.json";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadTextFile(filename, content, contentType = "text/plain") {
+  const blob = new Blob([String(content || "")], { type: contentType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename || "omniforum-export.txt";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function renderUploadPreviewList(uploads = [], options = {}) {
@@ -806,6 +878,73 @@ function replacePageQuery(params = {}) {
   window.history.replaceState({}, "", url);
 }
 
+function absoluteSiteUrl(path = "/") {
+  return new URL(path, window.location.origin).toString();
+}
+
+function upsertMetaTag(selector, attributes) {
+  let node = document.head.querySelector(selector);
+  if (!node) {
+    node = document.createElement("meta");
+    Object.entries(attributes).forEach(([key, value]) => {
+      if (key !== "content") {
+        node.setAttribute(key, value);
+      }
+    });
+    document.head.appendChild(node);
+  }
+  if (Object.prototype.hasOwnProperty.call(attributes, "content")) {
+    node.setAttribute("content", attributes.content || "");
+  }
+  return node;
+}
+
+function upsertLinkTag(selector, attributes) {
+  let node = document.head.querySelector(selector);
+  if (!node) {
+    node = document.createElement("link");
+    Object.entries(attributes).forEach(([key, value]) => {
+      if (key !== "href") {
+        node.setAttribute(key, value);
+      }
+    });
+    document.head.appendChild(node);
+  }
+  if (Object.prototype.hasOwnProperty.call(attributes, "href")) {
+    node.setAttribute("href", attributes.href || "");
+  }
+  return node;
+}
+
+function setPageMetadata(options = {}) {
+  const title = String(options.title || "OmniForum");
+  const description = String(options.description || "OmniForum is a modern community forum for discussion, support, and direct messaging.");
+  const canonicalPath = options.canonicalPath || `${window.location.pathname}${window.location.search}`;
+  const canonicalUrl = absoluteSiteUrl(canonicalPath);
+  const ogType = options.type || "website";
+  const robots = options.noindex ? "noindex, nofollow" : "index, follow";
+  document.title = title;
+  upsertMetaTag('meta[name="description"]', { name: "description", content: description });
+  upsertMetaTag('meta[property="og:site_name"]', { property: "og:site_name", content: "OmniForum" });
+  upsertMetaTag('meta[property="og:title"]', { property: "og:title", content: title });
+  upsertMetaTag('meta[property="og:description"]', { property: "og:description", content: description });
+  upsertMetaTag('meta[property="og:type"]', { property: "og:type", content: ogType });
+  upsertMetaTag('meta[property="og:url"]', { property: "og:url", content: canonicalUrl });
+  upsertMetaTag('meta[name="twitter:card"]', { name: "twitter:card", content: options.imageUrl ? "summary_large_image" : "summary" });
+  upsertMetaTag('meta[name="twitter:title"]', { name: "twitter:title", content: title });
+  upsertMetaTag('meta[name="twitter:description"]', { name: "twitter:description", content: description });
+  upsertMetaTag('meta[name="robots"]', { name: "robots", content: robots });
+  if (options.imageUrl) {
+    const imageUrl = absoluteSiteUrl(options.imageUrl);
+    upsertMetaTag('meta[property="og:image"]', { property: "og:image", content: imageUrl });
+    upsertMetaTag('meta[name="twitter:image"]', { name: "twitter:image", content: imageUrl });
+  } else {
+    document.head.querySelector('meta[property="og:image"]')?.remove();
+    document.head.querySelector('meta[name="twitter:image"]')?.remove();
+  }
+  upsertLinkTag('link[rel="canonical"]', { rel: "canonical", href: canonicalUrl });
+}
+
 function paginationLabel(pagination) {
   if (!pagination) return "";
   const total = Number(pagination.totalItems || 0);
@@ -862,13 +1001,43 @@ function clearDraft(scope, id = "") {
   }
 }
 
+function listDrafts() {
+  const prefix = "nexus:draft:";
+  const drafts = [];
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (!key || !key.startsWith(prefix)) continue;
+      const [, , scope, ...idParts] = key.split(":");
+      const raw = window.localStorage.getItem(key);
+      const payload = raw ? JSON.parse(raw) : {};
+      const title = payload.title || payload.content || "";
+      drafts.push({
+        key,
+        scope,
+        id: idParts.join(":") || "default",
+        savedAt: payload.savedAt || "",
+        title: String(title || "Untitled draft").slice(0, 80),
+        payload,
+      });
+    }
+  } catch {
+    return drafts;
+  }
+  return drafts.sort((a, b) => String(b.savedAt || "").localeCompare(String(a.savedAt || "")));
+}
+
 function serializeJsArg(value) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return String(value);
   }
   return `'${String(value ?? "")
     .replaceAll("\\", "\\\\")
-    .replaceAll("'", "\\'")}'`;
+    .replaceAll("'", "\\'")
+    .replaceAll("\r", "\\r")
+    .replaceAll("\n", "\\n")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029")}'`;
 }
 
 window.DB = DB;
@@ -887,15 +1056,22 @@ window.readSingleImageUpload = readSingleImageUpload;
 window.renderInlineMedia = renderInlineMedia;
 window.renderUserContent = renderUserContent;
 window.bindDropTarget = bindDropTarget;
+window.bindPasteImageTarget = bindPasteImageTarget;
 window.renderUploadPreviewList = renderUploadPreviewList;
 window.mentionQueryAtCaret = mentionQueryAtCaret;
 window.insertMentionAtCaret = insertMentionAtCaret;
+window.toggleSensitiveMedia = toggleSensitiveMedia;
+window.downloadJsonFile = downloadJsonFile;
+window.downloadTextFile = downloadTextFile;
 window.queryParam = queryParam;
 window.replacePageQuery = replacePageQuery;
+window.absoluteSiteUrl = absoluteSiteUrl;
+window.setPageMetadata = setPageMetadata;
 window.renderPaginationControls = renderPaginationControls;
 window.loadDraft = loadDraft;
 window.saveDraft = saveDraft;
 window.clearDraft = clearDraft;
+window.listDrafts = listDrafts;
 window.serializeJsArg = serializeJsArg;
 
 applyInitialSiteTheme();

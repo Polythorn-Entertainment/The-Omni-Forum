@@ -39,6 +39,8 @@ function renderEmptyState(icon, message, detail = "") {
 
 function renderThreadBadges(thread) {
   const badges = [];
+  if (thread.prefix) badges.push(`<span class="badge badge-pin">${escapeHtml(thread.prefix)}</span>`);
+  if (thread.featured) badges.push('<span class="badge badge-featured">★ Featured</span>');
   if (thread.pinned) badges.push('<span class="badge badge-pin">📌 Pinned</span>');
   if (thread.hot) badges.push('<span class="badge badge-hot">🔥 Active</span>');
   if (thread.locked) badges.push('<span class="badge badge-locked">🔒 Locked</span>');

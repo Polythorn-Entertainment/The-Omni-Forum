@@ -7,6 +7,8 @@ let focusedPostId = null;
 let currentPage = 1;
 let replyUploads = [];
 let replyMentionTimer = null;
+let threadLiveRefreshTimer = null;
+let replyDraftSavedTimer = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   refreshCurrentPage();
@@ -17,13 +19,31 @@ function threadReplyDraft() {
 }
 
 function saveThreadReplyDraft() {
+  const savedAt = new Date().toISOString();
   saveDraft("thread-reply", currentThread?.id || queryParam("thread") || "", {
     content: document.getElementById("replyContent")?.value || "",
+    savedAt,
   });
+  setReplyDraftStatus(`Draft saved ${formatRelativeTime(savedAt)}`);
 }
 
 function clearThreadReplyDraft() {
   clearDraft("thread-reply", currentThread?.id || queryParam("thread") || "");
+  setReplyDraftStatus("");
+}
+
+function setReplyDraftStatus(message) {
+  const node = document.getElementById("replyDraftStatus");
+  if (!node) return;
+  node.textContent = message || "";
+  node.classList.toggle("visible", Boolean(message));
+  if (replyDraftSavedTimer) window.clearTimeout(replyDraftSavedTimer);
+  if (message) {
+    replyDraftSavedTimer = window.setTimeout(() => {
+      const draft = threadReplyDraft();
+      node.textContent = draft.savedAt ? `Draft saved ${formatRelativeTime(draft.savedAt)}` : "";
+    }, 30000);
+  }
 }
 
 function applyThreadPayload(data) {
@@ -74,9 +94,29 @@ async function refreshCurrentPage() {
     renderReplyArea();
     renderTopMembers(currentTopMembers);
     renderRelatedThreads(currentRelatedThreads);
+    setPageMetadata({
+      title: `OmniForum — ${currentThread.title}`,
+      description: `${currentThread.section.name} · ${fmtNum(currentThread.replies || 0)} replies · ${fmtNum(currentThread.views || 0)} views`,
+      canonicalPath: `/pages/thread.html?thread=${encodeURIComponent(currentThread.id)}`,
+      type: "article",
+    });
   } catch (err) {
     renderThreadError(err.status === 403 ? "🔒" : "⚠️", err.status === 403 ? "This thread is restricted." : "Could not load this thread.", err.message || "Please try again.");
+    setPageMetadata({
+      title: "OmniForum — Thread",
+      description: "Read and reply to thread discussions on OmniForum.",
+      canonicalPath: `/pages/thread.html${threadId ? `?thread=${encodeURIComponent(threadId)}` : ""}`,
+      type: "article",
+    });
   }
+}
+
+function scheduleThreadLiveRefresh() {
+  if (threadLiveRefreshTimer) return;
+  threadLiveRefreshTimer = window.setTimeout(async () => {
+    threadLiveRefreshTimer = null;
+    await refreshCurrentPage();
+  }, 900);
 }
 
 function renderThreadError(icon, title, detail) {
@@ -104,6 +144,7 @@ function renderThreadHeader() {
   if (currentThread.canModerate) {
     actions.push(`<button class="btn btn-ghost btn-sm" onclick="toggleThreadModeration('pinned')">${currentThread.pinned ? "Unpin" : "Pin"}</button>`);
     actions.push(`<button class="btn btn-ghost btn-sm" onclick="toggleThreadModeration('locked')">${currentThread.locked ? "Unlock" : "Lock"}</button>`);
+    actions.push(`<button class="btn btn-ghost btn-sm" onclick="toggleThreadModeration('featured')">${currentThread.featured ? "Unfeature" : "Feature"}</button>`);
   }
   if (currentThread.canDelete) {
     actions.push('<button class="btn btn-danger btn-sm" onclick="deleteThread()">Delete Thread</button>');
@@ -112,7 +153,7 @@ function renderThreadHeader() {
   header.innerHTML = `
     <div class="thread-header-top">
       <div>
-        <div class="thread-title">${escapeHtml(currentThread.title)}</div>
+        <div class="thread-title">${currentThread.prefix ? `<span class="thread-tag" style="margin-right:8px;">${escapeHtml(currentThread.prefix)}</span>` : ""}${escapeHtml(currentThread.title)}</div>
         <div class="thread-meta">
           ${renderThreadBadges(currentThread)}
           ${renderThreadTags(currentThread.tags || [])}
@@ -128,6 +169,26 @@ function renderThreadHeader() {
       <span class="thread-meta-item">⏱ ${escapeHtml(formatRelativeTime(currentThread.updatedAt))}</span>
     </div>
     ${renderThreadPoll()}
+    ${renderThreadStaffNotes()}
+  `;
+}
+
+function renderThreadStaffNotes() {
+  if (!currentThread?.canModerate) return "";
+  const notes = currentThread.staffNotes || [];
+  return `
+    <div class="thread-staff-notes">
+      <div class="thread-staff-notes-head">
+        <strong>Staff Notes</strong>
+        <button class="btn btn-ghost btn-sm" onclick="showThreadSettingsModal()">Add Note</button>
+      </div>
+      ${notes.length ? notes.slice(0, 3).map((note) => `
+        <div class="thread-staff-note">
+          <div class="thread-staff-note-meta">${escapeHtml(note.author?.username || "Staff")} · ${escapeHtml(formatRelativeTime(note.createdAt))}</div>
+          <div>${escapeHtml(note.note)}</div>
+        </div>
+      `).join("") : '<div class="tiny-copy">No staff notes yet. Add context in Thread Settings for future moderators.</div>'}
+    </div>
   `;
 }
 
@@ -140,6 +201,7 @@ function renderThreadStats() {
     <li><span>Started</span><strong>${escapeHtml(formatDate(currentThread.createdAt))}</strong></li>
     <li><span>Status</span><strong>${currentThread.locked ? "Locked" : "Open"}</strong></li>
     <li><span>Solved</span><strong>${currentThread.solved ? "Yes" : "No"}</strong></li>
+    ${currentThread.prefix ? `<li><span>Prefix</span><strong>${escapeHtml(currentThread.prefix)}</strong></li>` : ""}
     <li><span>Poll</span><strong>${currentThread.poll ? "Enabled" : "None"}</strong></li>
     <li><span>Saved</span><strong>${currentThread.bookmarkedByViewer ? "Yes" : "No"}</strong></li>
     <li><span>Following</span><strong>${currentThread.subscribedByViewer ? "Yes" : "No"}</strong></li>
@@ -219,6 +281,7 @@ function goToThreadPage(page) {
 function renderPosts() {
   const container = document.getElementById("postContainer");
   if (!container) return;
+  container.classList.toggle("compact-post-stream", Boolean(Auth.getCurrentUser()?.preferences?.compactPostLayout));
   if (!currentPosts.length) {
     container.innerHTML = renderEmptyState("💬", "No posts yet.");
     return;
@@ -250,6 +313,9 @@ function renderPosts() {
       if (post.canDelete) {
         actions.push(`<button class="post-action" onclick="deletePost(${JSON.stringify(post.id)})" style="color:var(--accent3)">🗑 Delete</button>`);
       }
+      if (currentThread.canModerate && !post.isThreadStarter) {
+        actions.push(`<button class="post-action" onclick="showSplitThreadModal(${JSON.stringify(post.id)})">↗ Split</button>`);
+      }
 
       const absoluteIndex = Number(currentPagination?.offset || 0) + index + 1;
       return `
@@ -270,7 +336,10 @@ function renderPosts() {
               <span class="post-num">#${absoluteIndex}${post.isThreadStarter ? " · OP" : ""}${post.isAcceptedAnswer ? " · Answer" : ""}${post.shadowHidden ? " · Hidden" : ""}</span>
               <span class="post-date">${escapeHtml(formatDateTime(post.createdAt))}${post.editedAt ? ` · edited ${escapeHtml(formatRelativeTime(post.editedAt))}` : ""}</span>
             </div>
-            <div class="post-body">${renderUserContent(post.content, post.media)}</div>
+            <div class="post-body">${renderUserContent(post.content, post.media, {
+              sensitive: post.mediaSensitive,
+              blurMedia: post.mediaSensitive && Auth.getCurrentUser()?.preferences?.blurSensitiveMedia !== false,
+            })}</div>
             ${author.signature ? `<div class="post-signature">${renderUserContent(author.signature)}</div>` : ""}
             ${(post.reactions || []).length ? `
               <div class="post-reaction-row">
@@ -322,18 +391,17 @@ function insertComposerToken(textareaId, before, after = "") {
   const nextCaret = start + insertion.length;
   textarea.setSelectionRange(nextCaret, nextCaret);
   textarea.focus();
-  saveThreadReplyDraft();
-  refreshReplyPreview();
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function renderComposerToolbar(textareaId) {
   return `
     <div class="composer-toolbar">
-      <button class="btn btn-ghost btn-sm" type="button" onclick="insertComposerToken(${serializeJsArg(textareaId)}, '**', '**')"><strong>B</strong></button>
-      <button class="btn btn-ghost btn-sm" type="button" onclick="insertComposerToken(${serializeJsArg(textareaId)}, '*', '*')"><em>I</em></button>
-      <button class="btn btn-ghost btn-sm" type="button" onclick="insertComposerToken(${serializeJsArg(textareaId)}, '\`', '\`')">Code</button>
-      <button class="btn btn-ghost btn-sm" type="button" onclick="insertComposerToken(${serializeJsArg(textareaId)}, '\n> ', '')">Quote</button>
-      <button class="btn btn-ghost btn-sm" type="button" onclick="insertComposerToken(${serializeJsArg(textareaId)}, '\n- ', '')">List</button>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="insertComposerToken(${serializeJsArg(textareaId)}, ${serializeJsArg("**")}, ${serializeJsArg("**")})"><strong>B</strong></button>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="insertComposerToken(${serializeJsArg(textareaId)}, ${serializeJsArg("*")}, ${serializeJsArg("*")})"><em>I</em></button>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="insertComposerToken(${serializeJsArg(textareaId)}, ${serializeJsArg("`")}, ${serializeJsArg("`")})">Code</button>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="insertComposerToken(${serializeJsArg(textareaId)}, ${serializeJsArg("\n> ")}, ${serializeJsArg("")})">Quote</button>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="insertComposerToken(${serializeJsArg(textareaId)}, ${serializeJsArg("\n- ")}, ${serializeJsArg("")})">List</button>
     </div>
   `;
 }
@@ -430,11 +498,13 @@ function refreshReplyPreview() {
   const preview = document.getElementById("replyPreview");
   if (!preview) return;
   const content = document.getElementById("replyContent")?.value || "";
-  preview.innerHTML = `<div class="preview-card-body">${renderUserContent(content, replyUploads)}</div>`;
+  const sensitive = Boolean(document.getElementById("replySensitive")?.checked);
+  preview.innerHTML = `<div class="preview-card-body">${renderUserContent(content, replyUploads, { sensitive, blurMedia: false })}</div>`;
 }
 
 function bindReplyDraft() {
   const textarea = document.getElementById("replyContent");
+  const sensitive = document.getElementById("replySensitive");
   if (!textarea) return;
   const draft = threadReplyDraft();
   if (draft.content && !textarea.value) {
@@ -445,6 +515,7 @@ function bindReplyDraft() {
     refreshReplyPreview();
     scheduleReplyMentionLookup();
   });
+  sensitive?.addEventListener("change", () => refreshReplyPreview());
   textarea.addEventListener("click", () => scheduleReplyMentionLookup());
   textarea.addEventListener("keyup", () => scheduleReplyMentionLookup());
   refreshReplyPreview();
@@ -490,6 +561,7 @@ function renderReplyArea() {
       <div class="form-error" id="replyError"></div>
       ${renderComposerToolbar("replyContent")}
       <textarea class="form-textarea" id="replyContent" placeholder="Write your reply, or answer with images/GIFs only...">${escapeHtml(draft.content || "")}</textarea>
+      <div class="draft-status${draft.savedAt ? " visible" : ""}" id="replyDraftStatus">${draft.savedAt ? `Recovered draft · saved ${escapeHtml(formatRelativeTime(draft.savedAt))}` : ""}</div>
       <div id="replyMentionMenu" class="mention-suggestion-menu"></div>
       <div class="form-group">
         <label class="form-label">Images / GIFs</label>
@@ -498,6 +570,10 @@ function renderReplyArea() {
         <div class="form-hint">Optional. Up to ${UPLOAD_LIMITS.postCount} files, ${Math.round(UPLOAD_LIMITS.postBytes / (1024 * 1024))}MB each.</div>
         <div id="replyUploadPreview"></div>
       </div>
+      <label class="checkbox-row settings-checkbox-row">
+        <input type="checkbox" id="replySensitive">
+        <span>Blur these images for members who prefer sensitive media hidden</span>
+      </label>
       <div class="form-group">
         <label class="form-label">Preview</label>
         <div id="replyPreview"></div>
@@ -512,6 +588,15 @@ function renderReplyArea() {
   const replyMedia = document.getElementById("replyMedia");
   replyMedia?.addEventListener("change", (event) => handleReplyFiles(event.target.files));
   bindDropTarget(document.getElementById("replyDropzone"), replyMedia, handleReplyFiles);
+  bindPasteImageTarget(document.getElementById("replyContent"), async (uploads) => {
+    replyUploads = [...replyUploads, ...uploads].slice(0, UPLOAD_LIMITS.postCount);
+    renderReplyUploadPreview();
+    refreshReplyPreview();
+  }, {
+    maxFiles: Math.max(0, UPLOAD_LIMITS.postCount - replyUploads.length),
+    maxBytes: UPLOAD_LIMITS.postBytes,
+    field: "Reply images",
+  });
   renderReplyUploadPreview();
 }
 
@@ -530,6 +615,7 @@ async function submitReply() {
   const error = document.getElementById("replyError");
   const content = document.getElementById("replyContent")?.value?.trim() || "";
   const mediaInput = document.getElementById("replyMedia");
+  const mediaSensitive = Boolean(document.getElementById("replySensitive")?.checked);
   if (error) error.classList.remove("visible");
 
   try {
@@ -538,7 +624,7 @@ async function submitReply() {
       maxBytes: UPLOAD_LIMITS.postBytes,
       field: "Reply images",
     });
-    await API.createPost(currentThread.id, { content, mediaUploads });
+    await API.createPost(currentThread.id, { content, mediaUploads, mediaSensitive });
     clearThreadReplyDraft();
     replyUploads = [];
     focusedPostId = "";
@@ -767,9 +853,13 @@ function showEditPostModal(postId) {
       <input class="form-input" id="editPostMedia" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple>
       <div class="form-hint">Keep or remove the current media above, then add any new files here.</div>
     </div>
+    <label class="checkbox-row settings-checkbox-row">
+      <input type="checkbox" id="editPostSensitive"${post.mediaSensitive ? " checked" : ""}>
+      <span>Mark attached media as sensitive</span>
+    </label>
     <div class="form-group">
       <label class="form-label">Preview</label>
-      <div id="editPostPreview">${renderUserContent(post.content, post.media)}</div>
+      <div id="editPostPreview">${renderUserContent(post.content, post.media, { sensitive: post.mediaSensitive, blurMedia: false })}</div>
     </div>
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -780,7 +870,21 @@ function showEditPostModal(postId) {
   document.getElementById("editPostContent")?.addEventListener("input", () => {
     const preview = document.getElementById("editPostPreview");
     if (preview) {
-      preview.innerHTML = renderUserContent(document.getElementById("editPostContent")?.value || "");
+      preview.innerHTML = renderUserContent(
+        document.getElementById("editPostContent")?.value || "",
+        [],
+        { sensitive: Boolean(document.getElementById("editPostSensitive")?.checked), blurMedia: false },
+      );
+    }
+  });
+  document.getElementById("editPostSensitive")?.addEventListener("change", () => {
+    const preview = document.getElementById("editPostPreview");
+    if (preview) {
+      preview.innerHTML = renderUserContent(
+        document.getElementById("editPostContent")?.value || "",
+        [],
+        { sensitive: Boolean(document.getElementById("editPostSensitive")?.checked), blurMedia: false },
+      );
     }
   });
 }
@@ -789,6 +893,7 @@ async function savePostEdit(postId) {
   const error = document.getElementById("editPostError");
   const content = document.getElementById("editPostContent")?.value?.trim() || "";
   const title = document.getElementById("editPostTitle")?.value?.trim();
+  const mediaSensitive = Boolean(document.getElementById("editPostSensitive")?.checked);
   const keepMediaIds = Array.from(document.querySelectorAll(".edit-media-toggle:checked"))
     .map((node) => Number(node.value))
     .filter((value) => Number.isFinite(value) && value > 0);
@@ -801,7 +906,7 @@ async function savePostEdit(postId) {
       maxBytes: UPLOAD_LIMITS.postBytes,
       field: "Post images",
     });
-    await API.updatePost(postId, { content, title, keepMediaIds, mediaUploads });
+    await API.updatePost(postId, { content, title, keepMediaIds, mediaUploads, mediaSensitive });
     closeModal();
     await refreshCurrentPage();
     toast("Post updated.", "success");
@@ -815,6 +920,9 @@ async function savePostEdit(postId) {
 
 function showThreadSettingsModal() {
   if (!currentThread) return;
+  const prefixOptions = (currentThread.section.threadPrefixes || [])
+    .map((item) => `<option value="${escapeHtml(item)}"${item === (currentThread.prefix || "") ? " selected" : ""}>${escapeHtml(item)}</option>`)
+    .join("");
   openModal(`
     <button class="modal-close" onclick="closeModal()">✕</button>
     <div class="modal-title">Thread Settings</div>
@@ -823,6 +931,15 @@ function showThreadSettingsModal() {
       <label class="form-label">Title</label>
       <input class="form-input" id="threadSettingsTitle" maxlength="120" value="${escapeHtml(currentThread.title)}">
     </div>
+    ${prefixOptions ? `
+      <div class="form-group">
+        <label class="form-label">Prefix</label>
+        <select class="form-input" id="threadSettingsPrefix">
+          <option value="">No prefix</option>
+          ${prefixOptions}
+        </select>
+      </div>
+    ` : ""}
     <div class="form-group">
       <label class="form-label">Tags</label>
       <input class="form-input" id="threadSettingsTags" value="${escapeHtml((currentThread.tags || []).join(", "))}" placeholder="design, help, announcement">
@@ -834,6 +951,7 @@ function showThreadSettingsModal() {
       <div class="checkbox-stack">
         <label class="checkbox-row"><input type="checkbox" id="threadPinned"${currentThread.pinned ? " checked" : ""}> <span>Pin this thread</span></label>
         <label class="checkbox-row"><input type="checkbox" id="threadLocked"${currentThread.locked ? " checked" : ""}> <span>Lock replies</span></label>
+        <label class="checkbox-row"><input type="checkbox" id="threadFeatured"${currentThread.featured ? " checked" : ""}> <span>Feature on the homepage spotlight</span></label>
       </div>
       <div class="form-row search-filter-grid">
         <div class="form-group">
@@ -852,6 +970,18 @@ function showThreadSettingsModal() {
           <label class="checkbox-row"><input type="checkbox" id="threadPollClosed"${currentThread.poll.isClosed ? " checked" : ""}> <span>Close poll voting</span></label>
         </div>
       ` : ""}
+      <div class="form-group">
+        <label class="form-label">Staff Notes</label>
+        <div class="thread-settings-note-list">
+          ${(currentThread.staffNotes || []).length ? currentThread.staffNotes.map((note) => `
+            <div class="thread-staff-note">
+              <div class="thread-staff-note-meta">${escapeHtml(note.author?.username || "Staff")} · ${escapeHtml(formatDateTime(note.createdAt))}</div>
+              <div>${escapeHtml(note.note)}</div>
+            </div>
+          `).join("") : '<div class="form-hint">No staff notes yet.</div>'}
+        </div>
+        <textarea class="form-textarea" id="threadStaffNote" maxlength="1200" placeholder="Add a staff-only note for future moderation context."></textarea>
+      </div>
     ` : ""}
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -863,25 +993,31 @@ function showThreadSettingsModal() {
 async function saveThreadSettings() {
   const error = document.getElementById("threadSettingsError");
   const title = document.getElementById("threadSettingsTitle")?.value?.trim() || "";
+  const prefix = document.getElementById("threadSettingsPrefix")?.value?.trim() || "";
   const tags = document.getElementById("threadSettingsTags")?.value?.trim() || "";
   const pinned = document.getElementById("threadPinned")?.checked;
   const locked = document.getElementById("threadLocked")?.checked;
+  const featured = document.getElementById("threadFeatured")?.checked;
   const solved = Boolean(document.getElementById("threadSolved")?.checked);
   const sectionId = document.getElementById("threadSectionId")?.value?.trim() || "";
   const mergeToThreadId = document.getElementById("threadMergeId")?.value?.trim() || "";
   const pollClosed = document.getElementById("threadPollClosed")?.checked;
+  const staffNote = document.getElementById("threadStaffNote")?.value?.trim() || "";
   if (error) error.classList.remove("visible");
 
   try {
     const data = await API.updateThread(currentThread.id, {
       title,
+      prefix,
       tags,
       pinned,
       locked,
+      featured,
       solved,
       sectionId,
       mergeToThreadId,
       pollClosed,
+      staffNote,
     });
     if (data.merged && data.thread) {
       toast("Threads merged.", "success");
@@ -912,9 +1048,64 @@ async function toggleThreadModeration(field) {
     renderThreadHeader();
     renderThreadStats();
     renderReplyArea();
-    toast(field === "locked" ? (currentThread.locked ? "Thread locked." : "Thread unlocked.") : (currentThread.pinned ? "Thread pinned." : "Thread unpinned."), "success");
+    const labels = {
+      locked: currentThread.locked ? "Thread locked." : "Thread unlocked.",
+      pinned: currentThread.pinned ? "Thread pinned." : "Thread unpinned.",
+      featured: currentThread.featured ? "Thread featured." : "Thread removed from featured.",
+    };
+    toast(labels[field] || "Thread updated.", "success");
   } catch (err) {
     toast(err.message || "Could not update thread moderation.", "error");
+  }
+}
+
+function showSplitThreadModal(postId) {
+  if (!currentThread?.canModerate) return;
+  const post = currentPosts.find((entry) => entry.id === postId);
+  if (!post || post.isThreadStarter) return;
+  openModal(`
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">Split Thread</div>
+    <p class="muted-copy">This moves the selected reply and every later reply on this page into a new thread. The original opening post stays here.</p>
+    <div class="form-error" id="splitThreadError"></div>
+    <div class="form-group">
+      <label class="form-label">New Thread Title</label>
+      <input class="form-input" id="splitThreadTitle" maxlength="120" value="${escapeHtml(`Split from: ${currentThread.title}`)}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Destination Section</label>
+      <input class="form-input" id="splitThreadSection" value="${escapeHtml(currentThread.section.id)}">
+      <div class="form-hint">Use a section slug. Leave as-is to keep it in this section.</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Tags</label>
+      <input class="form-input" id="splitThreadTags" value="${escapeHtml((currentThread.tags || []).join(", "))}">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitSplitThread(${JSON.stringify(postId)})">Create Split Thread</button>
+    </div>
+  `, { size: "lg" });
+}
+
+async function submitSplitThread(postId) {
+  const error = document.getElementById("splitThreadError");
+  if (error) error.classList.remove("visible");
+  try {
+    const data = await API.splitThread(currentThread.id, {
+      postId,
+      title: document.getElementById("splitThreadTitle")?.value?.trim() || "",
+      sectionId: document.getElementById("splitThreadSection")?.value?.trim() || "",
+      tags: document.getElementById("splitThreadTags")?.value?.trim() || "",
+    });
+    closeModal();
+    toast(data.message || "Thread split created.", "success");
+    goToThread(data.thread.id);
+  } catch (err) {
+    if (error) {
+      error.textContent = err.message || "Could not split that thread.";
+      error.classList.add("visible");
+    }
   }
 }
 
@@ -956,6 +1147,8 @@ window.savePostEdit = savePostEdit;
 window.showThreadSettingsModal = showThreadSettingsModal;
 window.saveThreadSettings = saveThreadSettings;
 window.toggleThreadModeration = toggleThreadModeration;
+window.showSplitThreadModal = showSplitThreadModal;
+window.submitSplitThread = submitSplitThread;
 window.deletePost = deletePost;
 window.deleteThread = deleteThread;
 window.goToThreadPage = goToThreadPage;
@@ -964,3 +1157,16 @@ window.insertComposerToken = insertComposerToken;
 window.removeReplyUpload = removeReplyUpload;
 window.updateReplyUploadAlt = updateReplyUploadAlt;
 window.applyReplyMention = applyReplyMention;
+window.getLiveContext = () => ({
+  threadId: currentThread?.id || queryParam("thread") || "",
+});
+window.handleLiveSnapshot = (snapshot) => {
+  const thread = snapshot?.thread;
+  if (!thread || !currentThread || Number(thread.id) !== Number(currentThread.id)) return;
+  if (
+    Number(thread.postCount || 0) !== Number(currentPosts.length || 0)
+    || Number(thread.lastPostId || 0) !== Number(currentPosts[currentPosts.length - 1]?.id || 0)
+  ) {
+    scheduleThreadLiveRefresh();
+  }
+};
