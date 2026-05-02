@@ -3,6 +3,7 @@ OmniForum Operations
 Running locally
 
 - Create a virtual environment with `python3 -m venv .venv`, activate it, and install dependencies with `python -m pip install -r requirements.txt`.
+- Copy `.env.example` to `.env` if you want persistent local overrides.
 - Start the server from the project root with `python app.py`.
 - By default it binds to `127.0.0.1:8000`.
 - Override runtime settings with:
@@ -28,6 +29,11 @@ Data layout
 - Report internal notes, SLA/escalation state, and saved moderation macros are stored in `data/reports.db`.
 - Admin-created backup archives are written to `data/exports/backups/`.
 - Runtime request logs are appended to `data/logs/server.log`.
+- Access logs are mirrored to `data/logs/access.log`; structured app events are written as JSON lines to `data/logs/app.jsonl`.
+- Source packages should include `data/README.md` and `.gitkeep` placeholders, not live `*.db`, session, upload, backup, or log files.
+- Use `OMNIFORUM_CONFIRM_RESET=yes scripts/reset_runtime_data.sh` to clean local runtime state after stopping the server.
+- Use `scripts/package_release.sh` to build a clean source archive without private runtime state.
+- Use `scripts/seed_demo.py http://127.0.0.1:8000` against a clean local server to create demo users/content for screenshots and QA.
 
 Backups
 
@@ -110,9 +116,30 @@ Production notes
 - Put OmniForum behind a reverse proxy such as nginx.
 - Set `OMNIFORUM_SECURE_COOKIES=1` when traffic is served over HTTPS.
 - Keep the app on a private loopback/private subnet binding and let the proxy handle TLS.
+- Keep `data/` on persistent storage and writable by the service user.
+- Rotate `data/logs/server.log`, `data/logs/access.log`, and `data/logs/app.jsonl` with logrotate or the host's log management tool.
+- A ready-to-copy logrotate example is available at `deploy/logrotate-omniforum.conf`.
+- Keep backups off-host; local backup archives are useful but not enough if the disk is lost.
 - Review the provided nginx example in `deploy/nginx-omniforum.conf`.
 - Check `/robots.txt` and `/sitemap.xml` after setting `OMNIFORUM_PUBLIC_URL`.
 - If you use Discord for staff operations, set `OMNIFORUM_DISCORD_WEBHOOK_URL` so reports, appeals, contact notices, backups, and restores can fan out there.
+- Built-in abuse throttles are persisted in `data/audit.db` so restarts do not clear active windows. For public sites, add proxy-level request limiting for `/api/login`, `/api/register`, `/api/contact`, and upload-heavy routes before requests reach Python.
+
+Auth, media, and migration posture
+
+- Account recovery is email-free by default. Public communities should consider optional SMTP, magic links, or OAuth if they need stronger identity verification.
+- Uploaded images are type-checked, geometry-checked, resized, and re-encoded when Pillow is installed. Malware scanning/quarantine is not bundled.
+- Schema management is additive and pragmatic. Add explicit migration version records before supporting complex multi-version upgrade paths.
+
+Deployment smoke checks
+
+1. Load `/api/health` and confirm `{"ok": true}`.
+2. Load `/api/home` and confirm seeded sections appear.
+3. Create the owner account on a fresh instance.
+4. Create a test thread, reply, and backup.
+5. Open Settings -> Operations and confirm production install checks are green or intentionally acknowledged.
+6. Download a backup and verify the restore guide opens for that file.
+7. Run `scripts/verify_restore.sh` to restore a backup into a temporary copy and boot-check `/api/health` plus `/api/home`.
 
 Moderation / support queues
 

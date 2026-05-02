@@ -161,6 +161,10 @@ class OmniForumHarness:
         raise RuntimeError(f"Server did not start. Last error: {last_error}\n{output}")
 
     def stop(self) -> None:
+        self.stop_server()
+        self.temp_dir.cleanup()
+
+    def stop_server(self) -> None:
         if self.process and self.process.poll() is None:
             self.process.terminate()
             try:
@@ -170,7 +174,12 @@ class OmniForumHarness:
                 self.process.wait(timeout=10)
         if self.process and self.process.stdout:
             self.process.stdout.close()
-        self.temp_dir.cleanup()
+        self.process = None
+
+    def restart(self) -> None:
+        self.stop_server()
+        self.client = HttpClient(self.base_url)
+        self.start()
 
     def register(
         self,

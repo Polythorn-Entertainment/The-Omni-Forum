@@ -27,6 +27,35 @@ const modalState = {
   lastFocus: null,
 };
 
+function modalFocusableElements(modal) {
+  return Array.from(
+    modal.querySelectorAll("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])")
+  ).filter((node) => !node.disabled && node.offsetParent !== null);
+}
+
+function handleModalKeydown(event) {
+  const overlay = document.getElementById("modalOverlay");
+  const modal = document.getElementById("modal");
+  if (!overlay || !modal || overlay.classList.contains("hidden")) return;
+  if (event.key === "Escape" && modalState.dismissible) {
+    event.preventDefault();
+    closeModal(null, true);
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = modalFocusableElements(modal);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function openModal(html, options = {}) {
   const modal = document.getElementById("modal");
   const overlay = document.getElementById("modalOverlay");
@@ -40,9 +69,11 @@ function openModal(html, options = {}) {
   modal.innerHTML = html;
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-label", modal.querySelector(".modal-title")?.textContent?.trim() || "Dialog");
   overlay.classList.remove("hidden");
+  document.addEventListener("keydown", handleModalKeydown);
   window.setTimeout(() => {
-    const focusTarget = modal.querySelector("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+    const focusTarget = modalFocusableElements(modal)[0];
     focusTarget?.focus();
   }, 0);
 }
@@ -54,6 +85,7 @@ function closeModal(event, force = false) {
   if (!event || event.target === overlay) {
     modalState.dismissible = true;
     overlay.classList.add("hidden");
+    document.removeEventListener("keydown", handleModalKeydown);
     modalState.lastFocus?.focus?.();
     modalState.lastFocus = null;
   }
@@ -2017,6 +2049,15 @@ async function showAdminOpsModal() {
         <button class="btn btn-outline" onclick="showAuditLog()">Audit Log</button>
         <button class="btn btn-outline" onclick="showPluginManager()">Manage Plugins</button>
       </div>
+      <div class="ops-tab-row" role="navigation" aria-label="Operations sections">
+        <a href="#ops-launch">Launch</a>
+        <a href="#ops-health">Health</a>
+        <a href="#ops-data">Data</a>
+        <a href="#ops-moderation">Moderation</a>
+        <a href="#ops-plugins">Plugins</a>
+        <a href="#ops-logs">Logs</a>
+      </div>
+      <div id="ops-health" class="page-section-title" style="margin-top:18px;">Health</div>
       <div class="settings-tool-grid ops-dashboard-grid">
         <div class="settings-tool-card">
           <div class="settings-tool-title">Database Storage</div>
@@ -2132,12 +2173,12 @@ async function showAdminOpsModal() {
           </div>
         </div>
       </div>
-      <div class="page-section-title" style="margin-top:18px;">Launch Readiness</div>
+      <div id="ops-launch" class="page-section-title" style="margin-top:18px;">Launch Readiness</div>
       <div class="settings-tool-grid ops-dashboard-grid">
         ${renderOpsChecklist("Admin Onboarding Checklist", "First-run setup items for site structure, policies, registration, themes, and backups.", onboarding)}
         ${renderOpsChecklist("Production Install Checker", "Hosting readiness checks for Docker, proxy files, upload folders, cookies, backup tooling, and media processing.", installChecks)}
       </div>
-      <div class="page-section-title" style="margin-top:18px;">Recovery</div>
+      <div id="ops-data" class="page-section-title" style="margin-top:18px;">Data & Recovery</div>
       <div class="muted-copy" style="margin-bottom:12px;">Soft-deleted threads and replies can be restored here. Restore a thread before restoring any reply inside it.</div>
       <div class="moderation-history-list">
         ${trashItems.length ? trashItems.map((item) => `
@@ -2179,7 +2220,7 @@ async function showAdminOpsModal() {
           </div>
         `).join("") : '<div class="centered-message settings-empty-block">No backups created yet.</div>'}
       </div>
-      <div class="page-section-title" style="margin-top:18px;">Forum Analytics</div>
+      <div id="ops-plugins" class="page-section-title" style="margin-top:18px;">Forum Analytics</div>
       <div class="settings-tool-grid">
         <div class="settings-tool-card">
           <div class="settings-tool-title">7-Day Activity</div>
@@ -2216,7 +2257,7 @@ async function showAdminOpsModal() {
           </div>
         </div>
       </div>
-      <div class="page-section-title" style="margin-top:18px;">Moderation Audit</div>
+      <div id="ops-moderation" class="page-section-title" style="margin-top:18px;">Moderation Audit</div>
       <div class="settings-tool-grid">
         <div class="settings-tool-card">
           <div class="settings-tool-title">Active Restrictions</div>
@@ -2246,7 +2287,7 @@ async function showAdminOpsModal() {
           </div>
         </div>
       </div>
-      <div class="page-section-title" style="margin-top:18px;">Recent Logs</div>
+      <div id="ops-logs" class="page-section-title" style="margin-top:18px;">Recent Logs</div>
       <pre class="forum-code-block admin-log-block"><code>${escapeHtml((logData.logs || []).join("\n") || "No logs yet.")}</code></pre>
     `, { size: "xl" });
   } catch (err) {

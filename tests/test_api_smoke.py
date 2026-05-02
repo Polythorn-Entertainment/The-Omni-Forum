@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import unittest
 
 from test_support import OmniForumHarness
@@ -360,6 +361,77 @@ class ApiSmokeTests(unittest.TestCase):
             expect_status=403,
             headers={"X-Forwarded-For": "10.40.0.6"},
         )
+
+    def test_persistent_rate_limits_survive_restart(self) -> None:
+        headers = {"X-Forwarded-For": "10.51.0.8"}
+        for index in range(12):
+            self.harness.client.request(
+                "POST",
+                "/api/login",
+                payload={"username": f"missing_user_{index}", "password": "wrong-password"},
+                headers=headers,
+                expect_status=401,
+            )
+
+        with sqlite3.connect(self.harness.workspace / "data" / "audit.db") as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM rate_limit_events WHERE action = 'login' AND identity = 'ip:10.51.0.8'"
+            ).fetchone()[0]
+        self.assertEqual(12, count)
+
+        self.harness.restart()
+        self.harness.client.request(
+            "POST",
+            "/api/login",
+            payload={"username": "still_missing", "password": "wrong-password"},
+            headers=headers,
+            expect_status=429,
+        )
+
+    def test_incremental_search_index_updates_content_changes(self) -> None:
+        self.harness.register("search_owner", "password123")
+        thread_data = self.harness.client.request(
+            "POST",
+            "/api/sections/s-general",
+            payload={"title": "Alpha Quartzneedle", "content": "Opening body with oldthreadtoken."},
+        )
+        thread_id = int(thread_data["thread"]["id"])
+
+        search = self.harness.client.request("GET", "/api/search?q=quartzneedle")
+        self.assertTrue(any(item["id"] == thread_id for item in search["threads"]))
+
+        self.harness.client.request(
+            "PATCH",
+            f"/api/threads/{thread_id}",
+            payload={"title": "Beta Zirconneedle", "tags": "zirconneedle"},
+        )
+        updated_search = self.harness.client.request("GET", "/api/search?q=zirconneedle")
+        self.assertTrue(any(item["id"] == thread_id for item in updated_search["threads"]))
+        old_search = self.harness.client.request("GET", "/api/search?q=quartzneedle")
+        self.assertFalse(any(item["id"] == thread_id for item in old_search["threads"]))
+
+        reply_data = self.harness.client.request(
+            "POST",
+            f"/api/threads/{thread_id}/posts",
+            payload={"content": "Reply body with amberposttoken."},
+        )
+        post_id = int(reply_data["post"]["id"])
+        post_search = self.harness.client.request("GET", "/api/search?q=amberposttoken")
+        self.assertTrue(any(item["id"] == post_id for item in post_search["posts"]))
+
+        self.harness.client.request(
+            "PATCH",
+            f"/api/posts/{post_id}",
+            payload={"content": "Reply body with sapphireposttoken."},
+        )
+        new_post_search = self.harness.client.request("GET", "/api/search?q=sapphireposttoken")
+        self.assertTrue(any(item["id"] == post_id for item in new_post_search["posts"]))
+        old_post_search = self.harness.client.request("GET", "/api/search?q=amberposttoken")
+        self.assertFalse(any(item["id"] == post_id for item in old_post_search["posts"]))
+
+        self.harness.client.request("DELETE", f"/api/posts/{post_id}")
+        deleted_post_search = self.harness.client.request("GET", "/api/search?q=sapphireposttoken")
+        self.assertFalse(any(item["id"] == post_id for item in deleted_post_search["posts"]))
 
 
 if __name__ == "__main__":

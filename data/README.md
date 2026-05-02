@@ -10,7 +10,7 @@ Files are created automatically when the site starts:
 - `messages.db` for direct-message conversations
 - `notifications.db` for alerts, mentions, likes, and staff-action notices
 - `reports.db` for user-submitted reports, appeals, internal report notes, saved moderation macros, and moderation queue state
-- `audit.db` for searchable admin audit events and lightweight search analytics covering moderation, signup, content, plugins, sections, and operations
+- `audit.db` for searchable admin audit events, persistent rate-limit events, and lightweight search analytics covering moderation, signup, content, plugins, sections, and operations
 - `contact.db` for contact-form submissions, optional Discord usernames, and staff inbox review state
 
 Uploaded forum media is stored under:
@@ -22,7 +22,9 @@ Uploaded forum media is stored under:
 Operational runtime files are also created here:
 
 - `exports/backups/` for admin-created backup archives
-- `logs/server.log` for the lightweight request / operations log
+- `logs/server.log` for the lightweight legacy request / operations log
+- `logs/access.log` for access-style request lines
+- `logs/app.jsonl` for structured application events and failed API requests
 
 The admin Operations dashboard reads these files to report database size, media usage, backup health, onboarding readiness, first-run setup progress, production install checks, import/export readiness, analytics, recent failed requests, and restore readiness.
 
@@ -32,4 +34,4 @@ Fresh reset behavior:
 
 - If you stop the server and remove the `*.db` files in `data/`, OmniForum will recreate them automatically on the next app start
 - Default forum categories and sections are seeded again on startup
-- Removing files under `uploads/`, `exports/backups/`, and `logs/server.log` clears user-generated media, backups, and the lightweight runtime log
+- Removing files under `uploads/`, `exports/backups/`, and `logs/` clears user-generated media, backups, and runtime logs

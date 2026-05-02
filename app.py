@@ -67,6 +67,8 @@ EXPORTS_DIR = DATA_DIR / "exports"
 BACKUP_DIR = EXPORTS_DIR / "backups"
 LOG_DIR = DATA_DIR / "logs"
 LOG_FILE = LOG_DIR / "server.log"
+ACCESS_LOG_FILE = LOG_DIR / "access.log"
+APP_LOG_FILE = LOG_DIR / "app.jsonl"
 RESTORE_SCRIPT = BASE_DIR / "scripts" / "restore_omniforum.sh"
 MEDIA_FOLDERS = {
     "avatars": MEDIA_DIR / "avatars",
@@ -258,7 +260,6 @@ FLOOD_CONTROL_SECONDS = {
 LOW_TRUST_MAX_LINKS = 3
 LOW_TRUST_MAX_MENTIONS = 6
 URL_PATTERN = re.compile(r"(https?://|www\.)", re.IGNORECASE)
-RATE_LIMIT_STATE: dict[str, list[float]] = {}
 
 TABLE_SCHEMAS = {
     "users": "users_db.users",
@@ -289,6 +290,9 @@ TABLE_SCHEMAS = {
     "thread_poll_votes": "threads_db.thread_poll_votes",
     "thread_notes": "threads_db.thread_notes",
     "search_events": "audit_db.search_events",
+    "rate_limit_events": "audit_db.rate_limit_events",
+    "search_fts": "posts_db.search_fts",
+    "search_index_meta": "posts_db.search_index_meta",
 }
 TABLE_PATTERN = re.compile(
     r"(?<!\.)\b(" + "|".join(sorted(TABLE_SCHEMAS, key=len, reverse=True)) + r")\b"
@@ -999,6 +1003,10 @@ def init_db() -> None:
                 view_count INTEGER NOT NULL DEFAULT 0,
                 pinned INTEGER NOT NULL DEFAULT 0,
                 locked INTEGER NOT NULL DEFAULT 0,
+                solved INTEGER NOT NULL DEFAULT 0,
+                answer_post_id INTEGER,
+                featured INTEGER NOT NULL DEFAULT 0,
+                shadow_hidden INTEGER NOT NULL DEFAULT 0,
                 deleted_at TEXT,
                 deleted_by INTEGER,
                 delete_reason TEXT NOT NULL DEFAULT ''
@@ -1092,6 +1100,13 @@ def init_db() -> None:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS audit_db.rate_limit_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                identity TEXT NOT NULL,
+                created_at REAL NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS reports_db.reports (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 reporter_id INTEGER NOT NULL,
@@ -1170,10 +1185,15 @@ def init_db() -> None:
             );
 
             CREATE INDEX IF NOT EXISTS threads_db.idx_threads_section ON threads(section_id, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS threads_db.idx_threads_search_title ON threads(title COLLATE NOCASE);
+            CREATE INDEX IF NOT EXISTS threads_db.idx_threads_author ON threads(author_id, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS threads_db.idx_threads_solved ON threads(solved, updated_at DESC);
             CREATE INDEX IF NOT EXISTS threads_db.idx_thread_bookmarks_user ON thread_bookmarks(user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS threads_db.idx_thread_subscriptions_user ON thread_subscriptions(user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS posts_db.idx_posts_thread ON posts(thread_id, created_at ASC);
             CREATE INDEX IF NOT EXISTS posts_db.idx_posts_author ON posts(author_id);
+            CREATE INDEX IF NOT EXISTS posts_db.idx_posts_created ON posts(created_at DESC);
+            CREATE INDEX IF NOT EXISTS posts_db.idx_posts_content ON posts(content COLLATE NOCASE);
             CREATE INDEX IF NOT EXISTS posts_db.idx_post_media_post ON post_media(post_id, sort_order, id);
             CREATE INDEX IF NOT EXISTS posts_db.idx_post_edits_post ON post_edits(post_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS posts_db.idx_likes_post ON post_likes(post_id);
@@ -1194,12 +1214,14 @@ def init_db() -> None:
                 CREATE INDEX IF NOT EXISTS sections_db.idx_sections_category_sort ON sections(category_id, sort_order, id);
                 CREATE INDEX IF NOT EXISTS audit_db.idx_search_events_created ON search_events(created_at DESC);
                 CREATE INDEX IF NOT EXISTS audit_db.idx_search_events_query ON search_events(query COLLATE NOCASE, created_at DESC);
+                CREATE INDEX IF NOT EXISTS audit_db.idx_rate_limit_events_lookup ON rate_limit_events(action, identity, created_at DESC);
                 CREATE INDEX IF NOT EXISTS threads_db.idx_thread_notes_thread ON thread_notes(thread_id, created_at DESC);
                 CREATE INDEX IF NOT EXISTS reports_db.idx_report_notes_report ON report_internal_notes(report_id, created_at DESC);
                 CREATE INDEX IF NOT EXISTS reports_db.idx_moderation_macros_enabled ON moderation_macros(enabled, title COLLATE NOCASE);
                 """
             )
         ensure_database_schema(conn.raw)
+        ensure_search_index_schema(conn.raw)
         ensure_registration_defaults(conn)
         ensure_site_settings_defaults(conn)
         ensure_moderation_macro_defaults(conn)
@@ -1211,6 +1233,41 @@ def init_db() -> None:
         )
         maybe_migrate_legacy_db(conn)
         seed_sections(conn)
+        refresh_search_index(conn.raw)
+
+
+def ensure_search_index_schema(conn: sqlite3.Connection) -> bool:
+    try:
+        conn.execute(
+            """
+            CREATE VIRTUAL TABLE IF NOT EXISTS posts_db.search_fts USING fts5(
+                kind UNINDEXED,
+                source_id UNINDEXED,
+                section_slug UNINDEXED,
+                author_username UNINDEXED,
+                created_at UNINDEXED,
+                updated_at UNINDEXED,
+                title,
+                content,
+                tags,
+                tokenize='porter unicode61'
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS posts_db.search_index_meta (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                thread_count INTEGER NOT NULL DEFAULT 0,
+                post_count INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        return True
+    except sqlite3.OperationalError as exc:
+        append_server_log(f"fts unavailable: {exc}")
+        return False
 
 
 def ensure_column(
@@ -1499,6 +1556,13 @@ def ensure_database_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS audit_db.rate_limit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            identity TEXT NOT NULL,
+            created_at REAL NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS posts_db.idx_post_reactions_post
         ON post_reactions(post_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS posts_db.idx_post_reactions_user
@@ -1535,12 +1599,24 @@ def ensure_database_schema(conn: sqlite3.Connection) -> None:
             ON audit_events(target_type, target_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS threads_db.idx_threads_featured
             ON threads(featured, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS threads_db.idx_threads_search_title
+            ON threads(title COLLATE NOCASE);
+            CREATE INDEX IF NOT EXISTS threads_db.idx_threads_author
+            ON threads(author_id, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS threads_db.idx_threads_solved
+            ON threads(solved, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS posts_db.idx_posts_created
+            ON posts(created_at DESC);
+            CREATE INDEX IF NOT EXISTS posts_db.idx_posts_content
+            ON posts(content COLLATE NOCASE);
             CREATE INDEX IF NOT EXISTS threads_db.idx_thread_notes_thread
             ON thread_notes(thread_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS audit_db.idx_search_events_created
             ON search_events(created_at DESC);
             CREATE INDEX IF NOT EXISTS audit_db.idx_search_events_query
             ON search_events(query COLLATE NOCASE, created_at DESC);
+            CREATE INDEX IF NOT EXISTS audit_db.idx_rate_limit_events_lookup
+            ON rate_limit_events(action, identity, created_at DESC);
             CREATE INDEX IF NOT EXISTS users_db.idx_recovery_codes_user
             ON recovery_codes(user_id, used_at, created_at DESC);
             CREATE INDEX IF NOT EXISTS reports_db.idx_report_notes_report
@@ -3032,6 +3108,7 @@ def soft_delete_post(
         """,
         (now, actor_id, reason, now, post_id),
     )
+    remove_search_index_entry(conn, kind="post", source_id=post_id)
 
 
 def soft_delete_thread(
@@ -3051,6 +3128,7 @@ def soft_delete_thread(
         """,
         (now, actor_id, reason, now, thread_id),
     )
+    remove_search_index_entry(conn, kind="thread", source_id=thread_id)
     conn.execute(
         """
         UPDATE posts
@@ -3062,6 +3140,8 @@ def soft_delete_thread(
         """,
         (now, actor_id, reason, now, thread_id),
     )
+    for row in conn.execute("SELECT id FROM posts WHERE thread_id = ?", (thread_id,)).fetchall():
+        remove_search_index_entry(conn, kind="post", source_id=row["id"])
 
 
 def restore_deleted_post(conn: sqlite3.Connection, post_id: int) -> None:
@@ -3073,6 +3153,7 @@ def restore_deleted_post(conn: sqlite3.Connection, post_id: int) -> None:
         """,
         (post_id,),
     )
+    update_post_search_index(conn, post_id)
 
 
 def restore_deleted_thread(conn: sqlite3.Connection, thread_id: int) -> None:
@@ -3092,6 +3173,9 @@ def restore_deleted_thread(conn: sqlite3.Connection, thread_id: int) -> None:
         """,
         (thread_id,),
     )
+    update_thread_search_index(conn, thread_id)
+    for row in conn.execute("SELECT id FROM posts WHERE thread_id = ?", (thread_id,)).fetchall():
+        update_post_search_index(conn, row["id"])
 
 
 def serialize_deleted_item(row: sqlite3.Row) -> dict[str, Any]:
@@ -5561,6 +5645,245 @@ def thread_has_media(conn: sqlite3.Connection, thread_id: int) -> bool:
     return bool(row)
 
 
+def fts_query(value: str) -> str:
+    terms = re.findall(r"[A-Za-z0-9_]{2,}", str(value or "").lower())
+    return " ".join(f"{term}*" for term in terms[:8])
+
+
+def refresh_search_index(conn: sqlite3.Connection) -> bool:
+    try:
+        counts = {
+            "threads": conn.execute(
+                "SELECT COUNT(*) AS count FROM threads WHERE deleted_at IS NULL"
+            ).fetchone()["count"],
+            "posts": conn.execute(
+                "SELECT COUNT(*) AS count FROM posts WHERE deleted_at IS NULL"
+            ).fetchone()["count"],
+        }
+        meta = conn.execute("SELECT * FROM search_index_meta WHERE id = 1").fetchone()
+        if (
+            meta
+            and int(meta["thread_count"] or 0) == int(counts["threads"])
+            and int(meta["post_count"] or 0) == int(counts["posts"])
+        ):
+            return True
+        conn.execute("DELETE FROM search_fts")
+        thread_rows = conn.execute(
+            """
+            SELECT
+                t.id,
+                t.title,
+                t.tags_json,
+                t.created_at,
+                t.updated_at,
+                s.slug AS section_slug,
+                u.username AS author_username,
+                COALESCE(fp.content, '') AS first_post_content
+            FROM threads t
+            JOIN sections s ON s.id = t.section_id
+            JOIN users u ON u.id = t.author_id
+            LEFT JOIN posts fp ON fp.id = (
+                SELECT p.id
+                FROM posts p
+                WHERE p.thread_id = t.id AND p.deleted_at IS NULL
+                ORDER BY p.created_at ASC, p.id ASC
+                LIMIT 1
+            )
+            WHERE t.deleted_at IS NULL
+            """
+        ).fetchall()
+        post_rows = conn.execute(
+            """
+            SELECT
+                p.id,
+                p.content,
+                p.created_at,
+                p.updated_at,
+                t.title,
+                t.tags_json,
+                s.slug AS section_slug,
+                u.username AS author_username
+            FROM posts p
+            JOIN threads t ON t.id = p.thread_id
+            JOIN sections s ON s.id = t.section_id
+            JOIN users u ON u.id = p.author_id
+            WHERE p.deleted_at IS NULL AND t.deleted_at IS NULL
+            """
+        ).fetchall()
+        conn.executemany(
+            """
+            INSERT INTO search_fts (
+                kind, source_id, section_slug, author_username, created_at, updated_at,
+                title, content, tags
+            )
+            VALUES ('thread', ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    row["id"],
+                    row["section_slug"],
+                    row["author_username"],
+                    row["created_at"],
+                    row["updated_at"],
+                    row["title"],
+                    row["first_post_content"] or "",
+                    " ".join(json.loads(row["tags_json"] or "[]")),
+                )
+                for row in thread_rows
+            ],
+        )
+        conn.executemany(
+            """
+            INSERT INTO search_fts (
+                kind, source_id, section_slug, author_username, created_at, updated_at,
+                title, content, tags
+            )
+            VALUES ('post', ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    row["id"],
+                    row["section_slug"],
+                    row["author_username"],
+                    row["created_at"],
+                    row["updated_at"],
+                    row["title"],
+                    row["content"],
+                    " ".join(json.loads(row["tags_json"] or "[]")),
+                )
+                for row in post_rows
+            ],
+        )
+        conn.execute(
+            """
+            INSERT INTO search_index_meta (id, thread_count, post_count, updated_at)
+            VALUES (1, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                thread_count = excluded.thread_count,
+                post_count = excluded.post_count,
+                updated_at = excluded.updated_at
+            """,
+            (counts["threads"], counts["posts"], utc_iso()),
+        )
+        return True
+    except (sqlite3.OperationalError, sqlite3.DatabaseError, json.JSONDecodeError) as exc:
+        append_server_log(f"fts refresh failed: {exc}")
+        return False
+
+
+def search_index_tags(value: Any) -> str:
+    try:
+        tags = json.loads(value or "[]")
+    except json.JSONDecodeError:
+        tags = []
+    return " ".join(str(tag).strip() for tag in tags if str(tag).strip())
+
+
+def remove_search_index_entry(conn: sqlite3.Connection, *, kind: str, source_id: int) -> None:
+    try:
+        conn.execute("DELETE FROM search_fts WHERE kind = ? AND source_id = ?", (kind, source_id))
+    except sqlite3.OperationalError:
+        return
+
+
+def update_thread_search_index(conn: sqlite3.Connection, thread_id: int) -> None:
+    if not ensure_search_index_schema(conn):
+        return
+    remove_search_index_entry(conn, kind="thread", source_id=thread_id)
+    row = conn.execute(
+        """
+        SELECT
+            t.id,
+            t.title,
+            t.tags_json,
+            t.created_at,
+            t.updated_at,
+            s.slug AS section_slug,
+            u.username AS author_username,
+            COALESCE(fp.content, '') AS first_post_content
+        FROM threads t
+        JOIN sections s ON s.id = t.section_id
+        JOIN users u ON u.id = t.author_id
+        LEFT JOIN posts fp ON fp.id = (
+            SELECT p.id
+            FROM posts p
+            WHERE p.thread_id = t.id AND p.deleted_at IS NULL
+            ORDER BY p.created_at ASC, p.id ASC
+            LIMIT 1
+        )
+        WHERE t.id = ? AND t.deleted_at IS NULL
+        """,
+        (thread_id,),
+    ).fetchone()
+    if not row:
+        return
+    conn.execute(
+        """
+        INSERT INTO search_fts (
+            kind, source_id, section_slug, author_username, created_at, updated_at,
+            title, content, tags
+        )
+        VALUES ('thread', ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            row["id"],
+            row["section_slug"],
+            row["author_username"],
+            row["created_at"],
+            row["updated_at"],
+            row["title"],
+            row["first_post_content"] or "",
+            search_index_tags(row["tags_json"]),
+        ),
+    )
+
+
+def update_post_search_index(conn: sqlite3.Connection, post_id: int) -> None:
+    if not ensure_search_index_schema(conn):
+        return
+    remove_search_index_entry(conn, kind="post", source_id=post_id)
+    row = conn.execute(
+        """
+        SELECT
+            p.id,
+            p.content,
+            p.created_at,
+            p.updated_at,
+            t.title,
+            t.tags_json,
+            s.slug AS section_slug,
+            u.username AS author_username
+        FROM posts p
+        JOIN threads t ON t.id = p.thread_id
+        JOIN sections s ON s.id = t.section_id
+        JOIN users u ON u.id = p.author_id
+        WHERE p.id = ? AND p.deleted_at IS NULL AND t.deleted_at IS NULL
+        """,
+        (post_id,),
+    ).fetchone()
+    if not row:
+        return
+    conn.execute(
+        """
+        INSERT INTO search_fts (
+            kind, source_id, section_slug, author_username, created_at, updated_at,
+            title, content, tags
+        )
+        VALUES ('post', ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            row["id"],
+            row["section_slug"],
+            row["author_username"],
+            row["created_at"],
+            row["updated_at"],
+            row["title"],
+            row["content"],
+            search_index_tags(row["tags_json"]),
+        ),
+    )
+
+
 def log_search_event(
     conn: sqlite3.Connection,
     *,
@@ -5605,8 +5928,67 @@ def search_threads(
     normalized_query = query.lower().strip()
     pattern = f"%{normalized_query}%" if normalized_query else "%"
     cutoff = search_date_cutoff(date)
+    fts = fts_query(query)
+    clauses = [
+        "t.deleted_at IS NULL",
+    ]
+    params: list[Any] = []
+    fts_thread_ids: list[int] = []
+    if fts and refresh_search_index(conn):
+        try:
+            fts_thread_ids = [
+                int(row["source_id"])
+                for row in conn.execute(
+                    """
+                    SELECT source_id
+                    FROM search_fts
+                    WHERE kind = 'thread' AND search_fts MATCH ?
+                    ORDER BY rank
+                    LIMIT ?
+                    """,
+                    (fts, limit * 10),
+                ).fetchall()
+            ]
+        except sqlite3.OperationalError:
+            fts_thread_ids = []
+    if fts_thread_ids:
+        clauses.append(f"t.id IN ({','.join('?' for _ in fts_thread_ids)})")
+        params.extend(fts_thread_ids)
+    else:
+        clauses.append("(lower(t.title) LIKE ? OR lower(t.tags_json) LIKE ? OR lower(t.prefix) LIKE ?)")
+        params.extend([pattern, pattern, pattern])
+    if section_slug:
+        clauses.append("s.slug = ?")
+        params.append(section_slug)
+    if author:
+        clauses.append("lower(u.username) = lower(?)")
+        params.append(author)
+    if solved == "solved":
+        clauses.append("COALESCE(t.solved, 0) = 1")
+    elif solved == "unsolved":
+        clauses.append("COALESCE(t.solved, 0) = 0")
+    if cutoff:
+        clauses.append("t.created_at >= ?")
+        params.append(utc_iso(cutoff))
+    if media == "with_media":
+        clauses.append(
+            """
+            EXISTS (
+                SELECT 1
+                FROM post_media pm
+                JOIN posts p2 ON p2.id = pm.post_id
+                WHERE p2.thread_id = t.id AND p2.deleted_at IS NULL
+            )
+            """
+        )
+    if replies == "unanswered":
+        clauses.append("(SELECT COUNT(*) FROM posts rp WHERE rp.thread_id = t.id AND rp.deleted_at IS NULL) <= 1")
+    elif replies == "answered":
+        clauses.append("(SELECT COUNT(*) FROM posts rp WHERE rp.thread_id = t.id AND rp.deleted_at IS NULL) > 1")
+    where_sql = " AND ".join(clauses)
+    params.extend([normalized_query, f"{normalized_query}%", limit * 5])
     rows = conn.execute(
-        """
+        f"""
         SELECT
             t.*,
             s.slug AS section_slug,
@@ -5625,8 +6007,7 @@ def search_threads(
         FROM threads t
         JOIN sections s ON s.id = t.section_id
         JOIN users u ON u.id = t.author_id
-        WHERE t.deleted_at IS NULL
-          AND (lower(t.title) LIKE ? OR lower(t.tags_json) LIKE ? OR lower(t.prefix) LIKE ?)
+        WHERE {where_sql}
         ORDER BY
             CASE WHEN lower(t.title) = ? THEN 0 ELSE 1 END,
             CASE WHEN lower(t.title) LIKE ? THEN 0 ELSE 1 END,
@@ -5634,7 +6015,7 @@ def search_threads(
             t.id DESC
         LIMIT ?
         """,
-        (pattern, pattern, pattern, normalized_query, f"{normalized_query}%", limit * 5),
+        tuple(params),
     ).fetchall()
     output: list[dict[str, Any]] = []
     for row in rows:
@@ -5642,29 +6023,11 @@ def search_threads(
             continue
         if is_ignored_author(conn, viewer, row["author_id"]):
             continue
-        if section_slug and row["section_slug"] != section_slug:
-            continue
-        if author and row["author_name"].lower() != author.lower():
-            continue
         if tag and tag not in set(json.loads(row["tags_json"] or "[]")):
-            continue
-        if solved == "solved" and not bool(row["solved"]):
-            continue
-        if solved == "unsolved" and bool(row["solved"]):
-            continue
-        if cutoff and parse_iso(row["created_at"]) and parse_iso(row["created_at"]) < cutoff:
-            continue
-        if media == "with_media" and not thread_has_media(conn, row["id"]):
-            continue
-        if row["deleted_at"] is not None:
             continue
         if is_shadow_hidden_to_viewer(hidden=row["shadow_hidden"], author_id=row["author_id"], viewer=viewer):
             continue
         item = serialize_thread(row, conn, viewer)
-        if replies == "unanswered" and item["replies"] > 0:
-            continue
-        if replies == "answered" and item["replies"] <= 0:
-            continue
         output.append(item)
     if sort == "latest":
         output.sort(key=lambda item: item["updatedAt"], reverse=True)
@@ -5696,8 +6059,51 @@ def search_posts(
     normalized_query = query.lower().strip()
     pattern = f"%{normalized_query}%" if normalized_query else "%"
     cutoff = search_date_cutoff(date)
+    fts = fts_query(query)
+    clauses = [
+        "p.deleted_at IS NULL",
+        "t.deleted_at IS NULL",
+    ]
+    params: list[Any] = []
+    fts_post_ids: list[int] = []
+    if fts and refresh_search_index(conn):
+        try:
+            fts_post_ids = [
+                int(row["source_id"])
+                for row in conn.execute(
+                    """
+                    SELECT source_id
+                    FROM search_fts
+                    WHERE kind = 'post' AND search_fts MATCH ?
+                    ORDER BY rank
+                    LIMIT ?
+                    """,
+                    (fts, limit * 10),
+                ).fetchall()
+            ]
+        except sqlite3.OperationalError:
+            fts_post_ids = []
+    if fts_post_ids:
+        clauses.append(f"p.id IN ({','.join('?' for _ in fts_post_ids)})")
+        params.extend(fts_post_ids)
+    else:
+        clauses.append("lower(p.content) LIKE ?")
+        params.append(pattern)
+    if section_slug:
+        clauses.append("s.slug = ?")
+        params.append(section_slug)
+    if author:
+        clauses.append("lower(u.username) = lower(?)")
+        params.append(author)
+    if cutoff:
+        clauses.append("p.created_at >= ?")
+        params.append(utc_iso(cutoff))
+    if media == "with_media":
+        clauses.append("EXISTS(SELECT 1 FROM post_media pm WHERE pm.post_id = p.id)")
+    where_sql = " AND ".join(clauses)
+    params.extend([f"{normalized_query}%", limit * 5])
     rows = conn.execute(
-        """
+        f"""
         SELECT
             p.id,
             p.thread_id,
@@ -5722,28 +6128,20 @@ def search_posts(
         JOIN users u ON u.id = p.author_id
         JOIN threads t ON t.id = p.thread_id
         JOIN sections s ON s.id = t.section_id
-        WHERE p.deleted_at IS NULL
-          AND lower(p.content) LIKE ?
-          AND (? != 'with_media' OR EXISTS(SELECT 1 FROM post_media pm WHERE pm.post_id = p.id))
+        WHERE {where_sql}
         ORDER BY
             CASE WHEN lower(p.content) LIKE ? THEN 0 ELSE 1 END,
             p.created_at DESC,
             p.id DESC
         LIMIT ?
         """,
-        (pattern, media, f"{normalized_query}%", limit * 5),
+        tuple(params),
     ).fetchall()
     output: list[dict[str, Any]] = []
     for row in rows:
         if not has_required_role(viewer, row["section_required_role"]):
             continue
         if is_ignored_author(conn, viewer, row["author_id"]):
-            continue
-        if section_slug and row["section_slug"] != section_slug:
-            continue
-        if author and row["author_username"].lower() != author.lower():
-            continue
-        if cutoff and parse_iso(row["created_at"]) and parse_iso(row["created_at"]) < cutoff:
             continue
         if is_shadow_hidden_to_viewer(hidden=row["shadow_hidden"], author_id=row["author_id"], viewer=viewer):
             continue
@@ -6190,6 +6588,19 @@ def append_server_log(message: str) -> None:
         handle.write(f"[{utc_iso()}] {message}\n")
 
 
+def append_structured_log(event: str, **fields: Any) -> None:
+    ensure_runtime_dirs()
+    payload = {
+        "event": event,
+        "time": utc_iso(),
+        **fields,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    append_server_log(f"json {encoded}")
+    with APP_LOG_FILE.open("a", encoding="utf-8") as handle:
+        handle.write(f"{encoded}\n")
+
+
 def read_recent_logs(*, limit_lines: int = 120) -> list[str]:
     if not LOG_FILE.exists():
         return []
@@ -6240,6 +6651,33 @@ def recent_error_logs(*, limit: int = 8) -> list[dict[str, Any]]:
                     "line": line,
                 }
             )
+        if len(entries) >= limit:
+            break
+    return entries
+
+
+def parse_structured_log(line: str) -> dict[str, Any] | None:
+    marker = "] json "
+    if marker not in line:
+        return None
+    try:
+        payload = json.loads(line.split(marker, 1)[1])
+    except (json.JSONDecodeError, IndexError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def recent_structured_events(*, event: str | None = None, min_status: int | None = None, limit: int = 12) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for line in reversed(read_recent_logs(limit_lines=800)):
+        payload = parse_structured_log(line)
+        if not payload:
+            continue
+        if event and payload.get("event") != event:
+            continue
+        if min_status is not None and int(payload.get("status") or 0) < min_status:
+            continue
+        entries.append(payload)
         if len(entries) >= limit:
             break
     return entries
@@ -7126,6 +7564,8 @@ def get_admin_health(conn: sqlite3.Connection) -> dict[str, Any]:
     plugins = list_plugins()
     queues = get_queue_status(conn)
     latest_errors = recent_error_logs(limit=8)
+    latest_failed_requests = recent_structured_events(event="api_request", min_status=400, limit=8)
+    latest_exceptions = recent_structured_events(event="api_exception", limit=4)
     return {
         "uptimeSeconds": int((utc_now() - SERVER_STARTED_AT).total_seconds()),
         "startedAt": utc_iso(SERVER_STARTED_AT),
@@ -7173,8 +7613,11 @@ def get_admin_health(conn: sqlite3.Connection) -> dict[str, Any]:
         "pluginStatus": get_plugin_status_summary(plugins),
         "logs": {
             "latestErrors": latest_errors,
+            "latestFailedRequests": latest_failed_requests,
+            "latestExceptions": latest_exceptions,
             "errorCount": len(latest_errors),
-            "lastErrorAt": latest_errors[0]["time"] if latest_errors else "",
+            "failedRequestCount": len(latest_failed_requests),
+            "lastErrorAt": latest_failed_requests[0]["time"] if latest_failed_requests else (latest_errors[0]["time"] if latest_errors else ""),
         },
         "recovery": get_recovery_readiness(backups),
         "recentLogs": read_recent_logs(limit_lines=40),
@@ -8469,23 +8912,47 @@ class ForumHandler(SimpleHTTPRequestHandler):
             raise APIError("Security token expired. Refresh the page and try again.", HTTPStatus.FORBIDDEN)
 
     def enforce_rate_limit(self, action: str, viewer: dict[str, Any] | None = None) -> None:
+        # Backwards-compatible wrapper for older plugin code paths.
+        with get_connection() as conn:
+            self.enforce_persistent_rate_limit(conn.raw, action, viewer)
+
+    def enforce_persistent_rate_limit(
+        self,
+        conn: sqlite3.Connection,
+        action: str,
+        viewer: dict[str, Any] | None = None,
+    ) -> None:
         rule = RATE_LIMIT_RULES.get(action)
         if not rule:
             return
         limit, window_seconds, label = rule
         identity = f"user:{viewer['id']}" if viewer else f"ip:{self.request_ip() or 'unknown'}"
-        key = f"{action}:{identity}"
-        now = time.monotonic()
-        cutoff = now - window_seconds
-        attempts = [stamp for stamp in RATE_LIMIT_STATE.get(key, []) if stamp > cutoff]
-        if len(attempts) >= limit:
-            retry_after = max(1, math.ceil(window_seconds - (now - attempts[0])))
+        now = time.time()
+        cutoff = now - float(window_seconds)
+        conn.execute(
+            "DELETE FROM rate_limit_events WHERE action = ? AND identity = ? AND created_at < ?",
+            (action, identity, cutoff),
+        )
+        rows = conn.execute(
+            """
+            SELECT created_at
+            FROM rate_limit_events
+            WHERE action = ? AND identity = ? AND created_at >= ?
+            ORDER BY created_at ASC
+            """,
+            (action, identity, cutoff),
+        ).fetchall()
+        if len(rows) >= limit:
+            retry_after = max(1, math.ceil(window_seconds - (now - float(rows[0]["created_at"]))))
             raise APIError(
                 f"Too many {label}. Please wait about {retry_after}s and try again.",
                 HTTPStatus.TOO_MANY_REQUESTS,
             )
-        attempts.append(now)
-        RATE_LIMIT_STATE[key] = attempts
+        conn.execute(
+            "INSERT INTO rate_limit_events (action, identity, created_at) VALUES (?, ?, ?)",
+            (action, identity, now),
+        )
+        conn.commit()
 
     def end_headers(self) -> None:
         if not urlparse(self.path).path.startswith(f"{MEDIA_ROUTE}/"):
@@ -8497,7 +8964,8 @@ class ForumHandler(SimpleHTTPRequestHandler):
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; "
+            "default-src 'self'; img-src 'self' data: blob:; "
+            "style-src 'self' 'unsafe-inline'; font-src 'self'; "
             "script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; "
             "object-src 'none'; base-uri 'self'; form-action 'self'",
         )
@@ -8554,6 +9022,9 @@ class ForumHandler(SimpleHTTPRequestHandler):
         message = f"{self.address_string()} {fmt % args}"
         print(f"[{self.log_date_time_string()}] {message}")
         append_server_log(message)
+        ensure_runtime_dirs()
+        with ACCESS_LOG_FILE.open("a", encoding="utf-8") as handle:
+            handle.write(f"[{utc_iso()}] {message}\n")
 
     def serve_media(self, path: str) -> None:
         relative = unquote(path[len(MEDIA_ROUTE) :]).strip("/")
@@ -8684,24 +9155,52 @@ class ForumHandler(SimpleHTTPRequestHandler):
         path = parsed.path
         query = parse_qs(parsed.query)
         conn = get_connection()
+        request_id = secrets.token_hex(6)
+        started = time.monotonic()
+        viewer_id = None
+        status = HTTPStatus.OK
         try:
             if method != "GET":
                 self.enforce_same_origin()
             viewer = current_user_from_request(conn, self.headers, self.request_ip())
+            viewer_id = int(viewer["id"]) if viewer else None
             if method != "GET":
                 self.enforce_csrf_token(viewer, path)
             payload = self.dispatch_api(conn, method, path, query, viewer)
             status = payload.pop("__status__", HTTPStatus.OK)
             cookie_header = payload.pop("__cookie_header__", None)
+            payload["requestId"] = request_id
             self.respond_json(payload, status=status, cookie_header=cookie_header)
         except APIError as exc:
-            self.respond_json({"error": exc.message}, status=exc.status)
+            status = exc.status
+            self.respond_json({"error": exc.message, "requestId": request_id}, status=status)
         except Exception as exc:  # pragma: no cover - last-resort guardrail
+            status = HTTPStatus.INTERNAL_SERVER_ERROR
+            append_structured_log(
+                "api_exception",
+                requestId=request_id,
+                method=method,
+                path=path,
+                viewerId=viewer_id,
+                error=str(exc),
+            )
             self.respond_json(
-                {"error": "Unexpected server error.", "detail": str(exc)},
-                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "Unexpected server error.", "detail": str(exc), "requestId": request_id},
+                status=status,
             )
         finally:
+            duration_ms = int((time.monotonic() - started) * 1000)
+            if int(status) >= 400:
+                append_structured_log(
+                    "api_request",
+                    requestId=request_id,
+                    method=method,
+                    path=path,
+                    status=int(status),
+                    durationMs=duration_ms,
+                    viewerId=viewer_id,
+                    ip=self.request_ip(),
+                )
             conn.close()
 
     def dispatch_api(
@@ -11395,6 +11894,10 @@ class ForumHandler(SimpleHTTPRequestHandler):
         )
         conn.commit()
         if thread_ids:
+            for post_id in post_ids:
+                remove_search_index_entry(conn, kind="post", source_id=post_id)
+            for thread_id in thread_ids:
+                remove_search_index_entry(conn, kind="thread", source_id=thread_id)
             for storage_path in media_paths:
                 delete_media_file(storage_path)
         return {
@@ -11556,6 +12059,8 @@ class ForumHandler(SimpleHTTPRequestHandler):
                 created_at=now,
             )
         ensure_thread_subscription(conn, thread_id=thread_id, user_id=viewer["id"], created_at=now)
+        update_thread_search_index(conn, thread_id)
+        update_post_search_index(conn, first_post.lastrowid)
         conn.commit()
         award_xp(conn, viewer["id"], XP_THREAD)
         return {
@@ -11681,6 +12186,13 @@ class ForumHandler(SimpleHTTPRequestHandler):
             )
             conn.execute("DELETE FROM thread_bookmarks WHERE thread_id = ?", (thread_id,))
             conn.execute("DELETE FROM thread_subscriptions WHERE thread_id = ?", (thread_id,))
+            moved_post_ids = [
+                int(row["id"])
+                for row in conn.execute(
+                    "SELECT id FROM posts WHERE thread_id = ? AND deleted_at IS NULL",
+                    (merge_to_thread_id,),
+                ).fetchall()
+            ]
             conn.execute(
                 "UPDATE threads SET updated_at = ? WHERE id = ?",
                 (now, merge_to_thread_id),
@@ -11708,6 +12220,9 @@ class ForumHandler(SimpleHTTPRequestHandler):
                 },
                 created_at=now,
             )
+            update_thread_search_index(conn, merge_to_thread_id)
+            for moved_post_id in moved_post_ids:
+                update_post_search_index(conn, moved_post_id)
             conn.commit()
             return {
                 "currentUser": get_current_user_payload(conn, viewer),
@@ -11850,6 +12365,7 @@ class ForumHandler(SimpleHTTPRequestHandler):
                 metadata={"noteId": note_id},
                 created_at=now,
             )
+        update_thread_search_index(conn, thread_id)
         conn.commit()
         return {
             "currentUser": get_current_user_payload(conn, viewer),
@@ -11943,6 +12459,10 @@ class ForumHandler(SimpleHTTPRequestHandler):
         conn.execute("UPDATE threads SET updated_at = ? WHERE id = ?", (now, thread_id))
         ensure_thread_subscription(conn, thread_id=new_thread_id, user_id=viewer["id"], created_at=now)
         ensure_thread_subscription(conn, thread_id=new_thread_id, user_id=split_post["author_id"], created_at=now)
+        update_thread_search_index(conn, thread_id)
+        update_thread_search_index(conn, new_thread_id)
+        for moved_post_id in split_post_ids:
+            update_post_search_index(conn, moved_post_id)
         log_audit_event(
             conn,
             actor=viewer,
@@ -12088,6 +12608,8 @@ class ForumHandler(SimpleHTTPRequestHandler):
                 created_at=now,
             )
         ensure_thread_subscription(conn, thread_id=thread_id, user_id=viewer["id"], created_at=now)
+        update_thread_search_index(conn, thread_id)
+        update_post_search_index(conn, post_id)
         conn.commit()
         award_xp(conn, viewer["id"], XP_REPLY)
         posts, _ = get_posts_for_thread(
@@ -12231,6 +12753,8 @@ class ForumHandler(SimpleHTTPRequestHandler):
                 ),
             )
         conn.execute("UPDATE threads SET updated_at = ? WHERE id = ?", (now, row["thread_id"]))
+        update_thread_search_index(conn, row["thread_id"])
+        update_post_search_index(conn, post_id)
         if is_staff(viewer) and viewer["id"] != row["author_id"]:
             log_audit_event(
                 conn,
@@ -12287,6 +12811,7 @@ class ForumHandler(SimpleHTTPRequestHandler):
             (row["thread_id"], post_id),
         )
         conn.execute("UPDATE threads SET updated_at = ? WHERE id = ?", (now, row["thread_id"]))
+        update_thread_search_index(conn, row["thread_id"])
         if is_staff(viewer) or viewer["id"] != row["author_id"]:
             log_audit_event(
                 conn,

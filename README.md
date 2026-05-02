@@ -128,6 +128,14 @@ After the server starts, OmniForum creates and uses files inside `data/`, includ
 
 If `data/` is writable, the site will create what it needs automatically.
 
+If you need to return to a clean local install, stop the server and run:
+
+```bash
+OMNIFORUM_CONFIRM_RESET=yes scripts/reset_runtime_data.sh
+```
+
+This removes local SQLite databases, uploads, backups, and logs, then recreates the runtime folder structure.
+
 ### 8. Stop the server when you are done
 
 In the terminal where OmniForum is running, press:
@@ -258,7 +266,7 @@ sudo systemctl start omniforum
 sudo systemctl status omniforum
 ```
 
-### 9. Put nginx in front of OmniForum
+### 10. Put nginx in front of OmniForum
 
 Copy the example config from:
 
@@ -278,13 +286,13 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 10. Point your domain to the server
+### 11. Point your domain to the server
 
 Update your DNS so your domain points to your server's IP address.
 
 Then set that domain name in your nginx config.
 
-### 11. Enable HTTPS
+### 12. Enable HTTPS
 
 Set up SSL/TLS in nginx or your preferred reverse proxy.
 
@@ -294,13 +302,13 @@ When serving OmniForum over HTTPS, keep:
 OMNIFORUM_SECURE_COOKIES=1
 ```
 
-### 12. Open the website and create the first account
+### 13. Open the website and create the first account
 
 Visit your domain in the browser.
 
 If this is a fresh install, the first account created becomes the `Owner`.
 
-### 13. Create a backup after initial setup
+### 14. Create a backup after initial setup
 
 After logging in as admin/owner, open:
 
@@ -358,6 +366,25 @@ Runtime data is stored under `data/`:
 
 Only uploaded media and exported backups are meant to be web-served. The rest of `data/` is private application storage.
 
+## Source And Runtime Hygiene
+
+Keep source files and private runtime state separate:
+
+- Commit `data/README.md` and `.gitkeep` placeholders only.
+- Do not commit `data/*.db`, `data/logs/*`, `data/uploads/*`, or `data/exports/*`.
+- Use `scripts/reset_runtime_data.sh` to clear a local development instance before making a clean source package.
+- Use `scripts/package_release.sh` to create a clean source archive that excludes runtime data.
+- Use `scripts/seed_demo.py` against a clean local server to create screenshot/QA/demo content without private data.
+- Use `scripts/backup_omniforum.sh` or the admin Operations backup before deleting runtime data you may need again.
+- Use `scripts/scrub_private_data.sh` when preparing a source handoff from a dirty local workspace.
+- Mount `data/` as persistent storage in Docker, systemd, or VPS deployments.
+
+Privacy posture:
+
+- Treat everything under `data/` except placeholders and `data/README.md` as private.
+- Before publishing a copy of the source, run `scripts/package_release.sh` or reset local runtime data.
+- If private runtime data was ever shared, rotate sessions by clearing `data/sessions.db`, issue new passwords or recovery codes as needed, and replace any exposed webhook URLs in `.env`.
+
 ## Hosting Notes
 
 OmniForum is best suited to:
@@ -394,6 +421,64 @@ An example nginx config is included at `deploy/nginx-omniforum.conf`.
 7. Verify the homepage or `/api/health` after deployment.
 8. Check `/robots.txt` and `/sitemap.xml` once your public URL is set.
 
+## Production Checklist
+
+- Copy `.env.example` to `.env` and set `OMNIFORUM_PUBLIC_URL` to the real HTTPS origin.
+- Set `OMNIFORUM_SECURE_COOKIES=1` behind HTTPS.
+- Keep `OMNIFORUM_HOST=127.0.0.1` unless the app is inside a private container network.
+- Make `data/`, `data/uploads/`, `data/exports/`, and `data/logs/` writable by the service user.
+- Keep `data/` on persistent disk and back it up off-host.
+- Configure nginx or another proxy with an upload limit at least as large as `OMNIFORUM_MAX_REQUEST_BYTES`.
+- Rotate `data/logs/server.log`, `data/logs/access.log`, and `data/logs/app.jsonl` with the platform log rotation tool. A sample config is included at `deploy/logrotate-omniforum.conf`.
+- OmniForum stores persistent rate-limit events in `data/audit.db` so active abuse windows survive process restarts. Proxy-level request limiting for `/api/login`, `/api/register`, `/api/contact`, and upload-heavy routes is still recommended as an outer layer.
+- Create the first owner account, configure signup controls, and make an initial backup from Settings -> Operations.
+
+Example logrotate config:
+
+```text
+/var/www/omniforum/data/logs/server.log
+/var/www/omniforum/data/logs/access.log
+/var/www/omniforum/data/logs/app.jsonl {
+    weekly
+    rotate 8
+    compress
+    missingok
+    notifempty
+    copytruncate
+    create 0640 www-data www-data
+}
+```
+
+## Testing
+
+Run the backend/API smoke suite:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Run the browser smoke suite:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python -m playwright install chromium
+python -m unittest tests.test_browser_smoke -v
+```
+
+Verify backup restore into a temporary copy:
+
+```bash
+scripts/verify_restore.sh
+```
+
+## Security And Growth Notes
+
+- Account recovery is email-free by default. For larger public communities, consider adding optional SMTP, magic-link login, or OAuth before opening registration broadly.
+- Uploaded media is type-checked and reprocessed with Pillow, but OmniForum does not currently run malware scanning. High-trust deployments should place uploads behind a scanning/quarantine hook or restrict uploads to trusted roles.
+- Schema upgrades are handled with additive table/column checks. For multi-version production upgrades, move toward explicit schema versions and migration records.
+
 ## Features
 
 ### Forum and Community
@@ -409,6 +494,7 @@ An example nginx config is included at `deploy/nginx-omniforum.conf`.
 - Related threads and trending threads
 - Featured threads and community spotlight surfaces
 - Search across content
+- Optional SQLite FTS5-backed search index with LIKE fallback
 
 ### Accounts and Profiles
 
@@ -512,7 +598,7 @@ Guided restore flow:
 
 ## Operations and Maintenance
 
-- Runtime logs: `data/logs/server.log`
+- Runtime logs: `data/logs/server.log`, `data/logs/access.log`, and `data/logs/app.jsonl`
 - First-run setup wizard: `Settings -> Operations -> Setup Wizard`
 - Import/export and preview tools: `Settings -> Operations -> Import / Export`
 - Staff workflow macros: `Settings -> Operations -> Staff Workflows`

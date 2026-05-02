@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [ "${1:-}" = "" ]; then
-  echo "Usage: $0 /absolute/path/to/omniforum-backup-YYYYMMDD-HHMMSS.zip [/absolute/path/to/project]" >&2
+  echo "Usage: $0 /absolute/path/to/omniforum-backup.zip-or.tar.gz [/absolute/path/to/project]" >&2
   exit 1
 fi
 
@@ -30,7 +30,18 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Extracting $ARCHIVE_PATH into a temporary workspace..."
-unzip -q "$ARCHIVE_PATH" -d "$TMP_DIR"
+case "$ARCHIVE_PATH" in
+  *.zip)
+    unzip -q "$ARCHIVE_PATH" -d "$TMP_DIR"
+    ;;
+  *.tar.gz|*.tgz)
+    tar -xzf "$ARCHIVE_PATH" -C "$TMP_DIR"
+    ;;
+  *)
+    echo "Unsupported backup archive type. Use .zip, .tar.gz, or .tgz." >&2
+    exit 1
+    ;;
+esac
 
 if [ ! -d "$TMP_DIR/data" ]; then
   echo "The archive does not contain a data/ directory." >&2
