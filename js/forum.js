@@ -54,7 +54,7 @@ function renderThreadBadges(thread) {
 
 function renderThreadTags(tags = []) {
   return tags
-    .map((tag) => `<span class="thread-tag" style="background:rgba(0,212,255,0.1);color:var(--accent)">#${escapeHtml(tag)}</span>`)
+    .map((tag) => `<span class="thread-tag thread-tag-accent">#${escapeHtml(tag)}</span>`)
     .join(" ");
 }
 

@@ -85,7 +85,7 @@ function renderTrendingThreads(items = []) {
             <button class="trending-thread-card" onclick="goToThread(${JSON.stringify(thread.id)})">
               <div class="trending-thread-card-top">
                 <div class="trending-thread-section-pill">
-                  <span class="trending-thread-section-icon" style="background:${escapeHtml(thread.section.iconBg)}">${escapeHtml(thread.section.icon)}</span>
+                  <span class="trending-thread-section-icon ${sectionBgClass(thread.section.iconBg)}">${escapeHtml(thread.section.icon)}</span>
                   <span class="trending-thread-section-name">${escapeHtml(thread.section.name)}</span>
                 </div>
                 <span class="trending-thread-time">${escapeHtml(formatRelativeTime(thread.updatedAt))}</span>
@@ -197,7 +197,7 @@ function renderForumCategories(categories = []) {
 
           return `
             <div class="forum-section${section.canView ? "" : " locked"}" ${clickAction}>
-              <div class="section-icon" style="background:${section.iconBg}">${escapeHtml(section.icon)}</div>
+              <div class="section-icon ${sectionBgClass(section.iconBg)}">${escapeHtml(section.icon)}</div>
               <div class="section-info">
                 <div class="section-name">${escapeHtml(section.name)}</div>
                 <div class="section-desc">${escapeHtml(section.desc)}${lockedTag}${writeRestrictedTag}</div>

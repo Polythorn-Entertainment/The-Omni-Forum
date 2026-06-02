@@ -31,8 +31,10 @@ const Auth = {
     return data.currentUser;
   },
 
-  async register(username, password, inviteCode = "") {
-    const data = await API.register({ username, password, inviteCode });
+  async register(username, password, inviteCode = "", email = "") {
+    const payload = { username, password, inviteCode };
+    if (email && DB.isEmailAuthEnabled()) payload.email = email;
+    const data = await API.register(payload);
     this.setCurrentUser(data.currentUser || null);
     return data;
   },

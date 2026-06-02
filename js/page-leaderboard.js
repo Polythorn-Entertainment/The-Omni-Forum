@@ -95,8 +95,6 @@ function renderLeaderboard() {
   }
 
   const podiumOrder = [1, 0, 2];
-  const podiumHeights = ["100px", "130px", "80px"];
-  const podiumColors = ["#c0c0c0", "#ffd166", "#cd7f32"];
   const podiumLabels = ["2nd", "1st", "3rd"];
 
   podium.innerHTML = podiumOrder
@@ -107,8 +105,8 @@ function renderLeaderboard() {
         <div class="podium-card" onclick="showProfile(${JSON.stringify(member.id)})">
           ${makeAvatar(member, "podium")}
           <div class="podium-name">${escapeHtml(member.username)}</div>
-          <div class="podium-score" style="color:${podiumColors[visualIndex]}">${metricLabel(member)}</div>
-          <div class="podium-step" style="height:${podiumHeights[visualIndex]};background:${podiumColors[visualIndex]}20;border-color:${podiumColors[visualIndex]}40">
+          <div class="podium-score podium-score-${visualIndex + 1}">${metricLabel(member)}</div>
+          <div class="podium-step podium-step-${visualIndex + 1}">
             ${podiumLabels[visualIndex]}
           </div>
         </div>
@@ -120,7 +118,7 @@ function renderLeaderboard() {
     ${leaderboardMembers.map((member, index) => {
       const rank = Number(leaderboardPagination?.offset || 0) + index + 4;
       return `
-        <div class="leaderboard-item rank-other" onclick="showProfile(${JSON.stringify(member.id)})" style="cursor:pointer">
+        <div class="leaderboard-item rank-other clickable" onclick="showProfile(${JSON.stringify(member.id)})">
           <div class="rank-badge">${rank}</div>
           ${makeAvatar(member, "sm")}
           <div>

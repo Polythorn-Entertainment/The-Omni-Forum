@@ -72,7 +72,7 @@ function renderMembers(members) {
   const grid = document.getElementById("membersGrid");
   if (!grid) return;
   if (!members.length) {
-    grid.innerHTML = `<div style="grid-column:1/-1">${renderEmptyState("👤", "No members match those filters.")}</div>`;
+    grid.innerHTML = `<div class="grid-span-all">${renderEmptyState("👤", "No members match those filters.")}</div>`;
     return;
   }
 
@@ -90,7 +90,7 @@ function renderMembers(members) {
         </div>
       </div>
     `).join("")}
-    <div style="grid-column:1/-1">
+    <div class="grid-span-all">
       ${renderPaginationControls(currentMemberPagination, {
         previous: "goToMemberPage(currentMemberPage - 1)",
         next: "goToMemberPage(currentMemberPage + 1)",
