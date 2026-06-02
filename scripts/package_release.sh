@@ -10,11 +10,15 @@ mkdir -p "${OUT_DIR}"
 
 tar -czf "${ARCHIVE}" -C "${PROJECT_DIR}" \
   --exclude="./.env" \
+  --exclude="./deploy/omniforum-healthcheck.env" \
+  --exclude="./deploy/omniforum-offsite-backup.env" \
+  --exclude="./deploy/omniforum-remote-deploy.env" \
   --exclude="./.venv" \
   --exclude="./venv" \
   --exclude="./dist" \
-  --exclude="./__pycache__" \
-  --exclude="./tests/__pycache__" \
+  --exclude="*/__pycache__" \
+  --exclude="*.pyc" \
+  --exclude=".DS_Store" \
   --exclude="./data/*.db" \
   --exclude="./data/*.db-*" \
   --exclude="./data/logs/*" \

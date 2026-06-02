@@ -1,4 +1,6 @@
-OmniForum plugins live in subdirectories of `/plugins`.
+# OmniForum Plugins
+
+OmniForum plugins live in subdirectories of `plugins/`.
 
 Each plugin directory needs a `plugin.json` manifest. Example:
 
@@ -18,7 +20,7 @@ Each plugin directory needs a `plugin.json` manifest. Example:
 }
 ```
 
-Loading rules:
+## Loading Rules
 
 - Only enabled plugins are served to the browser.
 - Only files declared in `client.styles`, `client.scripts`, or `client.assets` are publicly served.

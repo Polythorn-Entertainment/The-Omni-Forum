@@ -13,6 +13,7 @@
 <meta name="twitter:description" content="Track top contributors, XP standings, and community rankings on OmniForum.">
 <link rel="canonical" href="/pages/leaderboard.html">
 <title>OmniForum — Leaderboard</title>
+<!-- ASSET STYLES -->
 <link rel="stylesheet" href="../css/main.css">
 </head>
 <body>
@@ -40,14 +41,14 @@
     <div class="page-section">
       <div class="page-section-title">Leaderboard</div>
 
-      <div class="sort-tabs" style="margin-bottom:20px">
+      <div class="sort-tabs mb-20">
         <button class="sort-tab active" data-metric="xp" onclick="setMetric('xp', this)">XP</button>
         <button class="sort-tab" data-metric="posts" onclick="setMetric('posts', this)">Posts</button>
         <button class="sort-tab" data-metric="role" onclick="setMetric('role', this)">Role Level</button>
       </div>
 
       <!-- Top 3 podium -->
-      <div id="podium" style="display:flex;gap:12px;justify-content:center;margin-bottom:28px;align-items:flex-end;"></div>
+      <div id="podium" class="leaderboard-podium"></div>
 
       <div class="leaderboard-list" id="leaderboardList"></div>
     </div>
@@ -60,7 +61,7 @@
     </div>
     <div class="sidebar-section">
       <h3 class="sidebar-title">Your Rank</h3>
-      <div id="yourRank" style="text-align:center;padding:12px 0;"></div>
+      <div id="yourRank" class="center-pad-y"></div>
     </div>
     <div class="sidebar-section">
       <h3 class="sidebar-title">How XP Works</h3>
@@ -88,9 +89,52 @@
 </div>
 <div id="toastContainer" class="toast-container"></div>
 
+<!-- ASSET SCRIPTS -->
+<script src="../js/api-core.js"></script>
+<script src="../js/api-public-client.js"></script>
+<script src="../js/api-moderation-client.js"></script>
+<script src="../js/api-content-client.js"></script>
+<script src="../js/api-admin-client.js"></script>
+<script src="../js/api-community-client.js"></script>
 <script src="../js/api.js"></script>
+<script src="../js/data-core.js"></script>
+<script src="../js/data-format.js"></script>
+<script src="../js/data-media.js"></script>
+<script src="../js/data-navigation.js"></script>
+<script src="../js/data-drafts.js"></script>
+<script src="../js/data-exports.js"></script>
 <script src="../js/data.js"></script>
 <script src="../js/auth.js"></script>
+<script src="../js/modal.js"></script>
+<script src="../js/action-delegation.js"></script>
+<script src="../js/layout-feedback-ui.js"></script>
+<script src="../js/layout-site-ui.js"></script>
+<script src="../js/layout-primitives-ui.js"></script>
+<script src="../js/layout-live-ui.js"></script>
+<script src="../js/layout-nav-ui.js"></script>
+<script src="../js/layout-sidebar-ui.js"></script>
+<script src="../js/layout-ui.js"></script>
+<script src="../js/auth-ui.js"></script>
+<script src="../js/search-ui.js"></script>
+<script src="../js/notifications-ui.js"></script>
+<script src="../js/reports-ui.js"></script>
+<script src="../js/admin-ops-components.js"></script>
+<script src="../js/admin-ops-audit.js"></script>
+<script src="../js/admin-ops-ui.js"></script>
+<script src="../js/admin-setup-ui.js"></script>
+<script src="../js/admin-export-ui.js"></script>
+<script src="../js/admin-workflows-ui.js"></script>
+<script src="../js/admin-signup-ui.js"></script>
+<script src="../js/admin-plugins-ui.js"></script>
+<script src="../js/admin-ui.js"></script>
+<script src="../js/report-modal-ui.js"></script>
+<script src="../js/messages-ui.js"></script>
+<script src="../js/sections-ui.js"></script>
+<script src="../js/profile-staff-ui.js"></script>
+<script src="../js/profile-moderation-ui.js"></script>
+<script src="../js/profile-card-ui.js"></script>
+<script src="../js/profile-edit-ui.js"></script>
+<script src="../js/profile-ui.js"></script>
 <script src="../js/ui.js"></script>
 <script src="../js/forum.js"></script>
 <script src="../js/page-leaderboard.js"></script>

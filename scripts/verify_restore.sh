@@ -36,8 +36,9 @@ tar -czf "${TMP_DIR}/source.tar.gz" -C "${PROJECT_DIR}" \
   --exclude="./.venv" \
   --exclude="./venv" \
   --exclude="./dist" \
-  --exclude="./__pycache__" \
-  --exclude="./tests/__pycache__" \
+  --exclude="*/__pycache__" \
+  --exclude="*.pyc" \
+  --exclude=".DS_Store" \
   --exclude="./data-pre-restore-*" \
   .
 tar -xzf "${TMP_DIR}/source.tar.gz" -C "${RESTORE_TARGET}"
@@ -78,4 +79,3 @@ while time.time() < deadline:
     time.sleep(0.25)
 raise SystemExit(f"Restore verification failed: {last_error}")
 PY
-

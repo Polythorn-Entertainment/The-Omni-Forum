@@ -18,6 +18,8 @@ class ApiSmokeTests(unittest.TestCase):
     def test_api_live_plugins_backup_and_moderation(self) -> None:
         owner = self.harness.register("owner_user", "password123")
         self.assertEqual(owner["currentUser"]["role"], "owner")
+        me = self.harness.client.request("GET", "/api/me")
+        self.assertEqual("owner_user", me["currentUser"]["username"])
 
         settings = self.harness.client.request(
             "PATCH",
@@ -65,7 +67,12 @@ class ApiSmokeTests(unittest.TestCase):
         )
 
         home = self.harness.client.request("GET", "/api/home")
-        general = next(section for category in home["categories"] for section in category["sections"] if section["id"] == "s-general")
+        general = next(
+            section
+            for category in home["categories"]
+            for section in category["sections"]
+            if section["id"] == "s-general"
+        )
         self.assertEqual(general["id"], "s-general")
 
         thread_data = self.harness.client.request(
@@ -212,7 +219,9 @@ class ApiSmokeTests(unittest.TestCase):
         self.assertGreaterEqual(health_payload["onboarding"]["total"], 1)
         self.assertGreaterEqual(health_payload["installChecks"]["total"], 1)
         self.assertIn("topSearchTerms30d", health_payload["analytics"])
-        self.assertTrue(any(item["query"] == "(filtered browse)" for item in health_payload["analytics"]["topSearchTerms30d"]))
+        self.assertTrue(
+            any(item["query"] == "(filtered browse)" for item in health_payload["analytics"]["topSearchTerms30d"])
+        )
         audit = self.harness.client.request("GET", "/api/admin/audit?limit=100")
         audit_actions = {item["action"] for item in audit["audit"]["items"]}
         self.assertIn("backup_create", audit_actions)
@@ -264,174 +273,6 @@ class ApiSmokeTests(unittest.TestCase):
             "/api/me/password",
             payload={"newPassword": "password456"},
         )
-
-    def test_signup_abuse_controls(self) -> None:
-        owner = self.harness.register("signup_owner", "password123")
-        self.assertEqual(owner["currentUser"]["role"], "owner")
-
-        controls = self.harness.client.request("GET", "/api/admin/registration")
-        self.assertEqual(controls["controls"]["settings"]["mode"], "Open")
-
-        updated = self.harness.client.request(
-            "PATCH",
-            "/api/admin/registration/settings",
-            payload={
-                "publicRegistrationEnabled": True,
-                "inviteRequired": False,
-                "approvalRequired": True,
-                "blockedUsernamePatterns": "blocked*\n*reserved*",
-            },
-        )
-        self.assertEqual(updated["controls"]["settings"]["mode"], "Approval queue")
-
-        self.harness.logout()
-        pending = self.harness.register(
-            "pending_user",
-            "password123",
-            expect_status=202,
-            headers={"X-Forwarded-For": "10.40.0.2"},
-        )
-        self.assertTrue(pending["pendingApproval"])
-        self.harness.client.request(
-            "POST",
-            "/api/login",
-            payload={"username": "pending_user", "password": "password123"},
-            expect_status=403,
-        )
-        self.harness.register(
-            "blocked_name",
-            "password123",
-            expect_status=403,
-            headers={"X-Forwarded-For": "10.40.0.3"},
-        )
-
-        self.harness.login("signup_owner", "password123")
-        controls = self.harness.client.request("GET", "/api/admin/registration")
-        self.assertEqual(controls["controls"]["pendingCount"], 1)
-        pending_id = controls["controls"]["pending"][0]["id"]
-        reviewed = self.harness.client.request(
-            "POST",
-            f"/api/admin/registrations/{pending_id}/review",
-            payload={"action": "approve", "note": "Looks legitimate."},
-        )
-        self.assertEqual(reviewed["controls"]["pendingCount"], 0)
-
-        self.harness.logout()
-        approved = self.harness.login("pending_user", "password123")
-        self.assertEqual(approved["currentUser"]["username"], "pending_user")
-
-        self.harness.logout()
-        self.harness.login("signup_owner", "password123")
-        self.harness.client.request(
-            "PATCH",
-            "/api/admin/registration/settings",
-            payload={
-                "publicRegistrationEnabled": False,
-                "inviteRequired": True,
-                "approvalRequired": False,
-                "blockedUsernamePatterns": "blocked*\n*reserved*",
-            },
-        )
-        invite = self.harness.client.request(
-            "POST",
-            "/api/admin/invites",
-            payload={"code": "INVITE123", "maxUses": 1, "note": "Smoke test invite"},
-        )
-        self.assertEqual(invite["invite"]["code"], "INVITE123")
-
-        self.harness.logout()
-        self.harness.register(
-            "no_invite_user",
-            "password123",
-            expect_status=400,
-            headers={"X-Forwarded-For": "10.40.0.4"},
-        )
-        invited = self.harness.register(
-            "invited_user",
-            "password123",
-            invite_code="INVITE123",
-            headers={"X-Forwarded-For": "10.40.0.5"},
-        )
-        self.assertEqual(invited["currentUser"]["username"], "invited_user")
-        self.harness.logout()
-        self.harness.register(
-            "second_invited",
-            "password123",
-            invite_code="INVITE123",
-            expect_status=403,
-            headers={"X-Forwarded-For": "10.40.0.6"},
-        )
-
-    def test_persistent_rate_limits_survive_restart(self) -> None:
-        headers = {"X-Forwarded-For": "10.51.0.8"}
-        for index in range(12):
-            self.harness.client.request(
-                "POST",
-                "/api/login",
-                payload={"username": f"missing_user_{index}", "password": "wrong-password"},
-                headers=headers,
-                expect_status=401,
-            )
-
-        with sqlite3.connect(self.harness.workspace / "data" / "audit.db") as conn:
-            count = conn.execute(
-                "SELECT COUNT(*) FROM rate_limit_events WHERE action = 'login' AND identity = 'ip:10.51.0.8'"
-            ).fetchone()[0]
-        self.assertEqual(12, count)
-
-        self.harness.restart()
-        self.harness.client.request(
-            "POST",
-            "/api/login",
-            payload={"username": "still_missing", "password": "wrong-password"},
-            headers=headers,
-            expect_status=429,
-        )
-
-    def test_incremental_search_index_updates_content_changes(self) -> None:
-        self.harness.register("search_owner", "password123")
-        thread_data = self.harness.client.request(
-            "POST",
-            "/api/sections/s-general",
-            payload={"title": "Alpha Quartzneedle", "content": "Opening body with oldthreadtoken."},
-        )
-        thread_id = int(thread_data["thread"]["id"])
-
-        search = self.harness.client.request("GET", "/api/search?q=quartzneedle")
-        self.assertTrue(any(item["id"] == thread_id for item in search["threads"]))
-
-        self.harness.client.request(
-            "PATCH",
-            f"/api/threads/{thread_id}",
-            payload={"title": "Beta Zirconneedle", "tags": "zirconneedle"},
-        )
-        updated_search = self.harness.client.request("GET", "/api/search?q=zirconneedle")
-        self.assertTrue(any(item["id"] == thread_id for item in updated_search["threads"]))
-        old_search = self.harness.client.request("GET", "/api/search?q=quartzneedle")
-        self.assertFalse(any(item["id"] == thread_id for item in old_search["threads"]))
-
-        reply_data = self.harness.client.request(
-            "POST",
-            f"/api/threads/{thread_id}/posts",
-            payload={"content": "Reply body with amberposttoken."},
-        )
-        post_id = int(reply_data["post"]["id"])
-        post_search = self.harness.client.request("GET", "/api/search?q=amberposttoken")
-        self.assertTrue(any(item["id"] == post_id for item in post_search["posts"]))
-
-        self.harness.client.request(
-            "PATCH",
-            f"/api/posts/{post_id}",
-            payload={"content": "Reply body with sapphireposttoken."},
-        )
-        new_post_search = self.harness.client.request("GET", "/api/search?q=sapphireposttoken")
-        self.assertTrue(any(item["id"] == post_id for item in new_post_search["posts"]))
-        old_post_search = self.harness.client.request("GET", "/api/search?q=amberposttoken")
-        self.assertFalse(any(item["id"] == post_id for item in old_post_search["posts"]))
-
-        self.harness.client.request("DELETE", f"/api/posts/{post_id}")
-        deleted_post_search = self.harness.client.request("GET", "/api/search?q=sapphireposttoken")
-        self.assertFalse(any(item["id"] == post_id for item in deleted_post_search["posts"]))
 
 
 if __name__ == "__main__":

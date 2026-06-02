@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import sqlite3
 
 from test_support import OmniForumHarness
 
@@ -49,6 +50,13 @@ class PageSmokeTests(unittest.TestCase):
         sitemap = self.harness.client.request("GET", "/sitemap.xml", parse_json=False, expect_status=200)
         self.assertIn("/pages/section.html?section=s-general", sitemap)
         self.assertIn(f"/pages/thread.html?thread={self.thread_id}", sitemap)
+
+    def test_schema_migration_history_is_recorded(self) -> None:
+        with sqlite3.connect(self.harness.workspace / "data" / "audit.db") as conn:
+            rows = conn.execute(
+                "SELECT migration_id FROM schema_migrations ORDER BY migration_id"
+            ).fetchall()
+        self.assertIn(("20260503_0001_baseline",), rows)
 
 
 if __name__ == "__main__":

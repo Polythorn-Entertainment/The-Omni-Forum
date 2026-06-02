@@ -1,1 +1,7 @@
-Pillow>=10,<12
+# Runtime dependencies.
+#
+# Pillow is used for upload validation, resizing, metadata stripping,
+# GIF handling, and thumbnail generation.
+#
+# Keep the floor at 12.2.0+ for CVE-2026-42310 / PDF trailer loop DoS.
+Pillow>=12.2.0,<13
