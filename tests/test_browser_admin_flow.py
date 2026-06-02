@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import re
 
-from tests.browser_base import BrowserSmokeBase, PASSWORD, expect
+try:
+    from browser_base import BrowserSmokeBase, PASSWORD, expect
+except ModuleNotFoundError:  # Allows pytest to import tests as a package.
+    from tests.browser_base import BrowserSmokeBase, PASSWORD, expect
 
 
 class BrowserAdminFlowTests(BrowserSmokeBase):

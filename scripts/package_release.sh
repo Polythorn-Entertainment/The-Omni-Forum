@@ -16,7 +16,10 @@ tar -czf "${ARCHIVE}" -C "${PROJECT_DIR}" \
   --exclude="./.venv" \
   --exclude="./venv" \
   --exclude="./dist" \
+  --exclude="./__pycache__" \
+  --exclude="./__pycache__/*" \
   --exclude="*/__pycache__" \
+  --exclude="*/__pycache__/*" \
   --exclude="*.pyc" \
   --exclude=".DS_Store" \
   --exclude="./data/*.db" \

@@ -16,6 +16,7 @@ Current development dependencies:
 
 - `ruff`: Python lint checks used by `scripts/release_check.sh` and CI
 - `playwright`: real browser coverage for auth, uploads, settings, moderation, admin Operations, accessibility shell checks, and mobile layout checks
+- `pytest`: optional test runner for GitHub and local collection compatibility; the suite also runs with `unittest`
 
 Install runtime dependencies:
 

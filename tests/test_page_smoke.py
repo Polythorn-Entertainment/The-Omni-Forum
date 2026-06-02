@@ -3,7 +3,10 @@ from __future__ import annotations
 import unittest
 import sqlite3
 
-from test_support import OmniForumHarness
+try:
+    from test_support import OmniForumHarness
+except ModuleNotFoundError:  # Allows pytest to import tests as a package.
+    from tests.test_support import OmniForumHarness
 
 
 class PageSmokeTests(unittest.TestCase):

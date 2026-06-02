@@ -7,7 +7,10 @@ import urllib.request
 from pathlib import Path
 import re
 
-from test_support import OmniForumHarness
+try:
+    from test_support import OmniForumHarness
+except ModuleNotFoundError:  # Allows pytest to import tests as a package.
+    from tests.test_support import OmniForumHarness
 
 ROOT = Path(__file__).resolve().parents[1]
 

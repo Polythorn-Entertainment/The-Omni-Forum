@@ -13,6 +13,7 @@ scripts/check_frontend.py
 scripts/production_readiness.py --json
 scripts/security_check.py
 python3 -m unittest discover -s tests -v
+python3 -m pytest
 ```
 
 ## Full Release Gate

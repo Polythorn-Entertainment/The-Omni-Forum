@@ -4,7 +4,10 @@ import json
 import sqlite3
 import unittest
 
-from test_support import OmniForumHarness
+try:
+    from test_support import OmniForumHarness
+except ModuleNotFoundError:  # Allows pytest to import tests as a package.
+    from tests.test_support import OmniForumHarness
 
 
 class ApiSmokeTests(unittest.TestCase):

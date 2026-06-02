@@ -4,3 +4,4 @@
 -r requirements.txt
 ruff>=0.8,<1
 playwright>=1.45,<2
+pytest>=8,<10
