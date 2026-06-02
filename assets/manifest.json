@@ -1,0 +1,98 @@
+{
+  "styles": [
+    "css/main.css"
+  ],
+  "sharedScripts": [
+    "js/api-core.js",
+    "js/api-public-client.js",
+    "js/api-moderation-client.js",
+    "js/api-content-client.js",
+    "js/api-admin-client.js",
+    "js/api-community-client.js",
+    "js/api.js",
+    "js/data-core.js",
+    "js/data-format.js",
+    "js/data-media.js",
+    "js/data-navigation.js",
+    "js/data-drafts.js",
+    "js/data-exports.js",
+    "js/data.js",
+    "js/auth.js",
+    "js/modal.js",
+    "js/action-delegation.js",
+    "js/layout-feedback-ui.js",
+    "js/layout-site-ui.js",
+    "js/layout-primitives-ui.js",
+    "js/layout-live-ui.js",
+    "js/layout-nav-ui.js",
+    "js/layout-sidebar-ui.js",
+    "js/layout-ui.js",
+    "js/auth-ui.js",
+    "js/search-ui.js",
+    "js/notifications-ui.js",
+    "js/reports-ui.js",
+    "js/admin-ops-components.js",
+    "js/admin-ops-audit.js",
+    "js/admin-ops-ui.js",
+    "js/admin-setup-ui.js",
+    "js/admin-export-ui.js",
+    "js/admin-workflows-ui.js",
+    "js/admin-signup-ui.js",
+    "js/admin-plugins-ui.js",
+    "js/admin-ui.js",
+    "js/report-modal-ui.js",
+    "js/messages-ui.js",
+    "js/sections-ui.js",
+    "js/profile-staff-ui.js",
+    "js/profile-moderation-ui.js",
+    "js/profile-card-ui.js",
+    "js/profile-edit-ui.js",
+    "js/profile-ui.js",
+    "js/ui.js",
+    "js/forum.js"
+  ],
+  "pages": {
+    "index.html": [
+      "js/main.js"
+    ],
+    "pages/contact.html": [
+      "js/page-contact.js"
+    ],
+    "pages/leaderboard.html": [
+      "js/page-leaderboard.js"
+    ],
+    "pages/members.html": [
+      "js/page-members.js"
+    ],
+    "pages/privacy.html": [
+      "js/page-static.js"
+    ],
+    "pages/rules.html": [
+      "js/page-static.js"
+    ],
+    "pages/section.html": [
+      "js/page-section-state.js",
+      "js/page-section-load.js",
+      "js/page-section-render.js",
+      "js/page-section-composer.js",
+      "js/page-section-actions.js",
+      "js/page-section.js"
+    ],
+    "pages/settings.html": [
+      "js/page-settings-helpers.js",
+      "js/page-settings-content.js",
+      "js/page-settings-sidebar.js",
+      "js/page-settings-actions.js",
+      "js/page-settings-exports.js",
+      "js/page-settings.js"
+    ],
+    "pages/thread.html": [
+      "js/page-thread-state.js",
+      "js/page-thread-render.js",
+      "js/page-thread-composer.js",
+      "js/page-thread-actions.js",
+      "js/page-thread-exports.js",
+      "js/page-thread.js"
+    ]
+  }
+}

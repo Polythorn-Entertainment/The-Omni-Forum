@@ -1,0 +1,12 @@
+[Unit]
+Description=OmniForum external healthcheck
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/omniforum
+EnvironmentFile=/var/www/omniforum/deploy/omniforum-healthcheck.env
+ExecStart=/usr/bin/python3 /var/www/omniforum/scripts/healthcheck.py

@@ -1,0 +1,75 @@
+/* Breadcrumbs, online indicator, search bar, sort tabs, and footer */
+
+/* ===== BREADCRUMB ===== */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 16px 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.breadcrumb a { color: var(--text-muted); }
+.breadcrumb a:hover { color: var(--text); }
+.breadcrumb-sep { color: var(--text-dim); }
+.breadcrumb-current { color: var(--text); }
+
+/* ===== ONLINE INDICATOR ===== */
+.online-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent5); box-shadow: 0 0 6px var(--accent5); animation: pulse-dot 2s ease infinite; }
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ===== SEARCH ===== */
+.search-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.search-input {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.search-input:focus { border-color: var(--accent); }
+
+/* ===== SORT TABS ===== */
+.sort-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+.sort-tab {
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: all 0.2s;
+}
+.sort-tab.active { background: var(--bg3); color: var(--text); border-color: var(--border-hover); }
+
+/* ===== FOOTER ===== */
+.footer {
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  padding: 24px;
+  margin-top: 40px;
+}
+.footer-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.footer-logo { font-family: var(--font-head); font-weight: 800; font-size: 14px; letter-spacing: 2px; }
+.footer-copy { font-size: 11px; color: var(--text-muted); flex: 1; }
+.footer-links { display: flex; gap: 16px; }
+.footer-links a { font-size: 11px; color: var(--text-muted); }

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run OmniForum external healthcheck every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=omniforum-healthcheck.service
+
+[Install]
+WantedBy=timers.target

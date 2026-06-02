@@ -1,0 +1,11 @@
+[Unit]
+Description=Run OmniForum offsite backup nightly
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+RandomizedDelaySec=20min
+Unit=omniforum-offsite-backup.service
+
+[Install]
+WantedBy=timers.target

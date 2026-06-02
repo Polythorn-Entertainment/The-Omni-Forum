@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniForum Deployment Assistant</title>
+<link rel="stylesheet" href="/assistant/style.css">
+</head>
+<body>
+<header>
+  <h1>OmniForum Deployment Assistant</h1>
+  <p>Local-only deployment helper for env files, checks, packaging, and deploy commands.</p>
+  <div id="status"></div>
+</header>
+<main class="grid">
+  <section class="card">
+    <h2>Production Env</h2>
+    <div class="row">
+      <div><label>Public URL</label><input id="publicUrl" value="https://forum.example.com"></div>
+      <div><label>Port</label><input id="port" value="8000"></div>
+    </div>
+    <label><input id="secureCookies" type="checkbox" checked> Secure cookies behind HTTPS</label>
+    <label><input id="emailAuthEnabled" type="checkbox"> Enable email account features</label>
+    <div class="row">
+      <div><label>Email From</label><input id="emailFrom" placeholder="Forum <no-reply@example.com>"></div>
+      <div><label>SMTP Host</label><input id="smtpHost"></div>
+    </div>
+    <div class="actions">
+      <button class="primary" data-write-env="runtime">Write .env</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Remote Deploy Env</h2>
+    <div class="row">
+      <div><label>Host</label><input id="deployHost" value="forum.example.com"></div>
+      <div><label>User</label><input id="deployUser" value="deploy"></div>
+    </div>
+    <div class="row">
+      <div><label>Deploy Path</label><input id="deployPath" value="/var/www/omniforum"></div>
+      <div><label>Service</label><input id="deployService" value="omniforum"></div>
+    </div>
+    <label>Public URL</label><input id="deployPublicUrl" value="https://forum.example.com">
+    <div class="actions">
+      <button class="primary" data-write-env="remote">Write remote deploy env</button>
+      <button id="showDeployCommand">Show command</button>
+    </div>
+  </section>
+
+  <section class="card third">
+    <h2>Healthcheck</h2>
+    <label>Healthcheck URL</label><input id="healthcheckUrl" value="https://forum.example.com">
+    <label>Webhook URL</label><input id="healthcheckWebhookUrl">
+    <div class="actions">
+      <button class="primary" data-write-env="healthcheck">Write health env</button>
+      <button data-action="healthcheck">Run healthcheck</button>
+    </div>
+  </section>
+
+  <section class="card third">
+    <h2>Offsite Backup</h2>
+    <label>Target</label><input id="offsiteTarget" placeholder="local:/srv/omniforum-offsite">
+    <label>Password File</label><input id="backupPasswordFile" placeholder="/root/omniforum-backup-pass">
+    <div class="actions">
+      <button class="primary" data-write-env="offsite">Write backup env</button>
+    </div>
+  </section>
+
+  <section class="card third">
+    <h2>Checks</h2>
+    <label>Deployed URL</label><input id="url" value="https://forum.example.com">
+    <div class="actions">
+      <button data-action="readiness">Readiness</button>
+      <button data-action="security">Security</button>
+      <button data-action="load">Load probe</button>
+      <button class="primary" data-action="package">Build package</button>
+    </div>
+  </section>
+
+  <section class="card wide">
+    <h2>Full Gate And Cleanup</h2>
+    <p class="small">The full release gate runs tests and restore checks. Scrub deletes local runtime DBs, logs, uploads, and backups.</p>
+    <div class="row">
+      <div class="actions">
+        <button class="primary" data-action="release_check">Run full release gate</button>
+      </div>
+      <div>
+        <label>Type SCRUB to clear runtime data</label>
+        <input id="scrubConfirm">
+        <div class="actions">
+          <button class="danger" data-action="scrub">Scrub runtime data</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card wide">
+    <h2>Output</h2>
+    <pre id="output">Ready.</pre>
+  </section>
+</main>
+<script src="/assistant/app.js"></script>
+</body>
+</html>

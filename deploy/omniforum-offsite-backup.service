@@ -1,0 +1,12 @@
+[Unit]
+Description=OmniForum offsite backup
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/omniforum
+EnvironmentFile=/var/www/omniforum/deploy/omniforum-offsite-backup.env
+ExecStart=/usr/bin/bash /var/www/omniforum/scripts/offsite_backup.sh /var/www/omniforum

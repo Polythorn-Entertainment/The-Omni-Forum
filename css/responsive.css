@@ -1,0 +1,137 @@
+/* Motion preferences and responsive overrides */
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1100px) {
+  .nav-username,
+  .nav-menu-role { display: none; }
+}
+@media (max-width: 900px) {
+  .nav-inner { gap: 16px; }
+  .forum-main { grid-template-columns: 1fr; }
+  .sidebar { position: static; }
+  .page-main { grid-template-columns: 1fr; }
+  .post { grid-template-columns: 100px 1fr; }
+  .hero-title { font-size: 36px; }
+  .thread-header-top { flex-direction: column; align-items: flex-start; }
+  .notice-head { flex-direction: column; }
+  .search-results-grid { grid-template-columns: 1fr; }
+  .settings-stat-grid,
+  .settings-form-grid { grid-template-columns: 1fr 1fr; }
+  .settings-profile-shell { grid-template-columns: 1fr; }
+  .settings-library-grid { grid-template-columns: 1fr; }
+  .settings-theme-grid { grid-template-columns: 1fr 1fr; }
+  .search-filter-grid { grid-template-columns: 1fr 1fr; }
+  .thread-composer-layout { grid-template-columns: 1fr; }
+  .thread-composer-side { position: static; }
+  .thread-composer-preview-card { max-height: none; }
+  .dm-layout { grid-template-columns: 1fr; }
+  .dm-sidebar,
+  .dm-panel { min-height: 0; }
+  .dm-thread-list { max-height: 220px; }
+  .dm-message-list { max-height: 38vh; }
+  .modal-overlay { padding: 16px; }
+  .modal { max-height: calc(100vh - 32px); }
+}
+@media (max-width: 600px) {
+  .nav-inner,
+  .forum-main,
+  .forum-hero {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .hero-stats {
+    gap: 16px;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  .stat-num { font-size: 24px; }
+  .nav-username { display: none; }
+  .modal-overlay { padding: 12px; }
+  .modal {
+    padding: 20px 16px;
+    max-height: calc(100vh - 24px);
+  }
+  .modal-title { font-size: 18px; margin-bottom: 20px; padding-right: 28px; }
+  .nav-menu-trigger { padding: 6px 10px; }
+  .nav-menu-label-guest { min-width: 0; }
+  .settings-stat-grid,
+  .settings-form-grid,
+  .settings-tool-grid,
+  .ops-kpi-grid,
+  .ops-dashboard-grid,
+  .audit-summary-grid,
+  .audit-meta-grid,
+  .settings-link-grid,
+  .settings-library-grid,
+  .settings-theme-grid,
+  .search-filter-grid,
+  .thread-composer-inline-grid,
+  .upload-preview-grid { grid-template-columns: 1fr; }
+  .trending-thread-grid { grid-template-columns: 1fr; }
+  .inline-media-grid,
+  .edit-media-grid { grid-template-columns: 1fr; }
+  .forum-section { grid-template-columns: 40px 1fr auto; }
+  .section-counts, .section-last { display: none; }
+  .thread-item { grid-template-columns: 36px 1fr auto; }
+  .thread-last-post { display: none; }
+  .post { grid-template-columns: 1fr; }
+  .post-sidebar { border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; }
+  .thread-header-title-row { align-items: flex-start; }
+  .profile-stats-grid { grid-template-columns: 1fr; }
+  .dm-thread-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+  .dm-thread-time { display: none; }
+  .dm-panel-header { flex-direction: column; align-items: stretch; }
+  .thread-poll-head,
+  .thread-poll-option,
+  .trending-thread-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .trending-thread-panel { padding: 18px; }
+  .trending-thread-card-top { flex-direction: column; align-items: stretch; }
+  .trending-thread-section-pill { max-width: 100%; }
+  .trending-thread-time { white-space: normal; }
+  .dm-message { max-width: 100%; }
+  .settings-thread-card,
+  .pagination-bar,
+  .pagination-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ops-hero,
+  .audit-event-head,
+  .thread-composer-hero,
+  .thread-composer-card-head,
+  .thread-composer-dropzone,
+  .form-label-row,
+  .audit-meta-grid div,
+  .detail-list div,
+  .ops-mini-list div,
+  .ops-log-meta,
+  .moderation-history-head,
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ops-status-badge { max-width: 100%; }
+  .thread-composer-actions {
+    position: static;
+    margin: 16px 0 0;
+    padding: 0;
+    border-top: none;
+    background: transparent;
+    backdrop-filter: none;
+  }
+  .moderation-history-impact { white-space: normal; }
+}

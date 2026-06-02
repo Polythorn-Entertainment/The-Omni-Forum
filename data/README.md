@@ -1,3 +1,5 @@
+# OmniForum Runtime Data
+
 Runtime forum data lives in this folder.
 
 Files are created automatically when the site starts:
@@ -10,7 +12,7 @@ Files are created automatically when the site starts:
 - `messages.db` for direct-message conversations
 - `notifications.db` for alerts, mentions, likes, and staff-action notices
 - `reports.db` for user-submitted reports, appeals, internal report notes, saved moderation macros, and moderation queue state
-- `audit.db` for searchable admin audit events, persistent rate-limit events, and lightweight search analytics covering moderation, signup, content, plugins, sections, and operations
+- `audit.db` for searchable admin audit events, schema migration history, persistent rate-limit events, and lightweight search analytics covering moderation, signup, content, plugins, sections, and operations
 - `contact.db` for contact-form submissions, optional Discord usernames, and staff inbox review state
 
 Uploaded forum media is stored under:
@@ -30,7 +32,7 @@ The admin Operations dashboard reads these files to report database size, media 
 
 Those uploads are served through `/media/...` routes. The rest of `data/` remains private application storage.
 
-Fresh reset behavior:
+## Fresh Reset Behavior
 
 - If you stop the server and remove the `*.db` files in `data/`, OmniForum will recreate them automatically on the next app start
 - Default forum categories and sections are seeded again on startup

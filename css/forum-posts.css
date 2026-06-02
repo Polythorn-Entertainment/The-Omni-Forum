@@ -1,0 +1,151 @@
+/* ===== POST VIEWER ===== */
+.post-container { display: flex; flex-direction: column; gap: 16px; }
+.post {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.post-sidebar {
+  background: var(--bg3);
+  border-right: 1px solid var(--border);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.post-username { font-family: var(--font-head); font-weight: 700; font-size: 13px; }
+.post-user-role { }
+.post-user-stats { width: 100%; }
+.post-user-stat { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); padding: 3px 0; }
+.post-user-stat strong { color: var(--text); }
+.post-main { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+.post-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.post-num { font-size: 11px; color: var(--text-dim); }
+.post-date { font-size: 11px; color: var(--text-muted); }
+.post-body { font-size: 13px; line-height: 1.8; color: var(--text); font-family: var(--font-body); }
+.post-body p { margin-bottom: 12px; }
+.inline-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.inline-media-grid.single {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 560px;
+}
+.inline-media-card {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg3);
+  transition: border-color 0.2s, transform 0.2s;
+}
+.inline-media-card:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+.inline-media-card img {
+  width: 100%;
+  max-height: 420px;
+  display: block;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.2);
+}
+.sensitive-media-card {
+  position: relative;
+}
+.sensitive-media-card.blurred .inline-media-card img {
+  filter: blur(18px);
+  transform: scale(1.04);
+}
+.sensitive-media-toggle {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(8,11,16,0.86);
+  color: var(--text);
+  font-family: var(--font-head);
+  font-size: 11px;
+  cursor: pointer;
+}
+.edit-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+.edit-media-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.edit-media-card img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.2);
+}
+.post-footer { display: flex; gap: 8px; align-items: center; }
+.post-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-body);
+}
+.post-action:hover { border-color: var(--border-hover); color: var(--text); }
+.post-action.liked { color: var(--accent3); border-color: rgba(255,107,107,0.3); background: rgba(255,107,107,0.05); }
+.post.post-focus {
+  border-color: rgba(0,212,255,0.4);
+  box-shadow: 0 0 0 1px rgba(0,212,255,0.12), 0 10px 26px rgba(0,212,255,0.08);
+}
+
+/* Reply form */
+.reply-form {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+}
+.reply-form h3 { font-family: var(--font-head); font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+.form-textarea {
+  width: 100%;
+  min-height: 120px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 14px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+  margin-bottom: 12px;
+}
+.form-textarea:focus { border-color: var(--accent); }
+.form-row { display: flex; gap: 8px; align-items: center; }

@@ -1,0 +1,56 @@
+/* ===== THREAD PAGE ===== */
+.thread-header {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px;
+  margin-bottom: 16px;
+}
+.thread-title { font-family: var(--font-head); font-size: 24px; font-weight: 700; margin-bottom: 12px; }
+.thread-meta { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+.thread-tag {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.thread-meta-item { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+
+.thread-list { display: flex; flex-direction: column; gap: 2px; }
+.thread-item {
+  display: grid;
+  grid-template-columns: 44px 1fr auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.thread-item:hover { background: var(--bg3); border-color: var(--border-hover); opacity: 1; }
+.thread-item.pinned { border-left: 3px solid var(--accent4); }
+.thread-item.hot { border-left: 3px solid var(--accent3); }
+.thread-info-title { font-family: var(--font-head); font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.thread-info-meta { font-size: 10px; color: var(--text-muted); }
+.thread-badges { display: flex; gap: 4px; }
+.badge {
+  padding: 2px 7px;
+  border-radius: 20px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.badge-pin { background: rgba(255,209,102,0.15); color: var(--accent4); }
+.badge-featured { background: rgba(255,209,102,0.2); color: var(--accent4); border-color: rgba(255,209,102,0.32); }
+.badge-hot { background: rgba(255,107,107,0.15); color: var(--accent3); }
+.badge-new { background: rgba(0,212,255,0.15); color: var(--accent); }
+.badge-locked { background: rgba(107,122,148,0.15); color: var(--text-muted); }
+.thread-replies { text-align: center; }
+.thread-reply-num { font-family: var(--font-head); font-weight: 700; font-size: 18px; }
+.thread-reply-label { font-size: 10px; color: var(--text-muted); }
+.thread-last-post { text-align: right; font-size: 11px; color: var(--text-muted); min-width: 100px; }

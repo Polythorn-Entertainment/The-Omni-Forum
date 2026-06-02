@@ -1,0 +1,72 @@
+/* Leaderboard highlights, toasts, and role colors */
+
+/* ===== LEADERBOARD ===== */
+.leaderboard-list { display: flex; flex-direction: column; gap: 8px; }
+.leaderboard-item {
+  display: grid;
+  grid-template-columns: 40px 44px 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: all 0.2s;
+}
+.leaderboard-item:hover { background: var(--bg3); border-color: var(--border-hover); }
+.leaderboard-item.rank-1 { border-color: rgba(255,209,102,0.3); background: rgba(255,209,102,0.04); }
+.leaderboard-item.rank-2 { border-color: rgba(192,192,192,0.2); }
+.leaderboard-item.rank-3 { border-color: rgba(205,127,50,0.2); }
+.rank-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 14px;
+}
+.rank-1 .rank-badge { background: rgba(255,209,102,0.2); color: var(--accent4); }
+.rank-2 .rank-badge { background: rgba(192,192,192,0.1); color: #c0c0c0; }
+.rank-3 .rank-badge { background: rgba(205,127,50,0.1); color: #cd7f32; }
+.rank-other .rank-badge { background: var(--bg4); color: var(--text-muted); }
+.leaderboard-score { text-align: right; }
+.score-val { font-family: var(--font-head); font-weight: 700; font-size: 18px; color: var(--accent); }
+.score-label { font-size: 10px; color: var(--text-muted); }
+
+/* ===== TOAST ===== */
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 300; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: var(--shadow-lg);
+  animation: toastIn 0.3s ease;
+  max-width: 320px;
+}
+.toast.success { border-left: 3px solid var(--accent5); }
+.toast.error { border-left: 3px solid var(--accent3); }
+.toast.info { border-left: 3px solid var(--accent); }
+@keyframes toastIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* ===== ROLE COLORS ===== */
+.role-owner { background: rgba(255,107,107,0.15); color: #ff6b6b; }
+.role-admin { background: rgba(255,107,107,0.1); color: #ff9f9f; }
+.role-mod { background: rgba(0,212,255,0.12); color: var(--accent); }
+.role-veteran { background: rgba(123,94,167,0.15); color: #b39ddb; }
+.role-member { background: rgba(107,122,148,0.15); color: var(--text-muted); }
+.role-new { background: rgba(6,214,160,0.12); color: var(--accent5); }
+
+.avatar-owner { background: linear-gradient(135deg, #ff6b6b, #ff4444); border-color: rgba(255,107,107,0.5) !important; }
+.avatar-admin { background: linear-gradient(135deg, #ff9f9f, #e06060); border-color: rgba(255,107,107,0.3) !important; }
+.avatar-mod { background: linear-gradient(135deg, #00d4ff, #0099cc); border-color: rgba(0,212,255,0.4) !important; }
+.avatar-veteran { background: linear-gradient(135deg, #7b5ea7, #5a3e8a); border-color: rgba(123,94,167,0.4) !important; }
+.avatar-member { background: linear-gradient(135deg, #3d4f68, #2a3548); border-color: rgba(61,79,104,0.4) !important; }
+.avatar-new { background: linear-gradient(135deg, #06d6a0, #04a57c); border-color: rgba(6,214,160,0.4) !important; }

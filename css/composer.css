@@ -1,0 +1,321 @@
+/* Composer layout, upload dropzones, upload previews, mention suggestions, and composer controls */
+
+.search-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.composer-toolbar {
+  margin-bottom: 10px;
+}
+
+.thread-composer-hero {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin: -4px 0 18px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 16%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--bg3) 92%, var(--accent)), var(--bg2));
+}
+
+.thread-composer-section-mark {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  font-size: 22px;
+}
+
+.thread-composer-eyebrow,
+.thread-composer-card-copy,
+.thread-composer-meta,
+.thread-composer-chip {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.thread-composer-eyebrow {
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+.thread-composer-title {
+  font-family: var(--font-head);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.thread-composer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.thread-composer-meta span,
+.thread-composer-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--bg3) 76%, transparent);
+}
+
+.thread-composer-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.thread-composer-main,
+.thread-composer-side,
+.thread-composer-poll-options {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.thread-composer-side {
+  position: sticky;
+  top: 0;
+}
+
+.thread-composer-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg3);
+  padding: 16px;
+}
+
+.thread-composer-card-head,
+.form-label-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.thread-composer-card-title {
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.thread-composer-card-copy {
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.thread-composer-inline-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.42fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.thread-composer-inline-grid > .form-group:only-child {
+  grid-column: 1 / -1;
+}
+
+.composer-title-input {
+  font-family: var(--font-head);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.thread-composer-textarea {
+  min-height: 230px;
+  line-height: 1.75;
+}
+
+.thread-composer-template {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  background: color-mix(in srgb, var(--bg2) 70%, transparent);
+}
+
+.thread-composer-template strong {
+  color: var(--text);
+}
+
+.thread-composer-dropzone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 10px;
+  text-align: left;
+}
+
+.thread-composer-dropzone strong,
+.thread-composer-dropzone span {
+  display: block;
+}
+
+.thread-composer-drop-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.composer-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.thread-composer-file-button {
+  width: fit-content;
+}
+
+.thread-composer-preview-card {
+  max-height: 62vh;
+  overflow: auto;
+}
+
+.thread-composer-actions {
+  position: sticky;
+  bottom: -32px;
+  z-index: 2;
+  margin: 16px -32px -32px;
+  padding: 16px 32px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg2) 92%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.upload-dropzone {
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: rgba(0, 212, 255, 0.06);
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.upload-dropzone.drag-active {
+  background: rgba(0, 212, 255, 0.12);
+  border-color: var(--accent2);
+}
+
+.upload-preview-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.upload-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.upload-preview-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+}
+
+.upload-preview-image-wrap {
+  position: relative;
+}
+
+.upload-preview-image {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.upload-preview-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(6, 12, 22, 0.8);
+  color: #fff;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.upload-preview-meta {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.upload-preview-alt {
+  margin-top: 8px;
+}
+
+.mention-suggestion-menu {
+  display: none;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.mention-suggestion-menu.visible {
+  display: grid;
+}
+
+.mention-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mention-suggestion:hover {
+  background: rgba(0, 212, 255, 0.08);
+}
+
+.mention-token {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.forum-code-block,
+.admin-log-block {
+  background: #0a1220;
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  color: #d9f6ff;
+  overflow: auto;
+}
